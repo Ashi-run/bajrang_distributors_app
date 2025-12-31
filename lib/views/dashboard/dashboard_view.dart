@@ -33,9 +33,9 @@ class DashboardView extends StatelessWidget {
             SizedBox(height: 20),
             Divider(),
             SizedBox(height: 10),
-            Text("Developed by", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text("Designed & Developed by", style: TextStyle(fontSize: 12, color: Colors.grey)),
             SizedBox(height: 4),
-            Text("Ashi Sharma", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
+            Text("Ashi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
             SizedBox(height: 4),
             Text("© 2025 All Rights Reserved", style: TextStyle(fontSize: 10, color: Colors.grey)),
           ],
@@ -60,34 +60,36 @@ class DashboardView extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 20),
-            const Text("Master Data Management", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1565C0))),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildMasterOption(
-                  context, 
-                  "Products", 
-                  Icons.inventory_2, 
-                  Colors.orange, 
-                  () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageProductsView()))
-                ),
-                _buildMasterOption(
-                  context, 
-                  "Customers", 
-                  Icons.people_alt, 
-                  Colors.blue, 
-                  () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageCustomersView()))
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-          ],
+        child: SafeArea( 
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              const Text("Master Data Management", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1565C0))),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildMasterOption(
+                    context, 
+                    "Products", 
+                    Icons.inventory_2, 
+                    Colors.orange, 
+                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageProductsView()))
+                  ),
+                  _buildMasterOption(
+                    context, 
+                    "Customers", 
+                    Icons.people_alt, 
+                    Colors.blue, 
+                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageCustomersView()))
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -143,7 +145,6 @@ class DashboardView extends StatelessWidget {
                         const Text("Bajrang Distributors", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                       ],
                     ),
-                    // ABOUT ICON
                     IconButton(
                       onPressed: () => _showAboutDialog(context),
                       icon: const CircleAvatar(
@@ -179,26 +180,31 @@ class DashboardView extends StatelessWidget {
             ),
           ),
 
-          // --- MASTERS BOTTOM BAR ---
-          InkWell(
-            onTap: () => _showMastersMenu(context),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.settings, color: primaryBlue),
-                  const SizedBox(width: 10),
-                  Text("MASTERS & SETTINGS", style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
-                  const SizedBox(width: 5),
-                  Icon(Icons.keyboard_arrow_up, color: primaryBlue, size: 20),
-                ],
+          // --- MASTERS BOTTOM BAR (SAFE AREA) ---
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+            ),
+            child: SafeArea(
+              top: false,
+              child: InkWell(
+                onTap: () => _showMastersMenu(context),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.settings, color: primaryBlue),
+                      const SizedBox(width: 10),
+                      Text("MASTERS & SETTINGS", style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
+                      const SizedBox(width: 5),
+                      Icon(Icons.keyboard_arrow_up, color: primaryBlue, size: 20),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -212,30 +218,19 @@ class DashboardView extends StatelessWidget {
       valueListenable: Hive.box<OrderModel>('orders_v2').listenable(),
       builder: (context, Box<OrderModel> box, _) {
         final today = DateTime.now();
+        final todayOrders = box.values.where((o) => o.date.year == today.year && o.date.month == today.month && o.date.day == today.day).toList();
         
-        // 1. Calculate Today's Orders
-        final todayOrders = box.values.where((o) => 
-          o.date.year == today.year && o.date.month == today.month && o.date.day == today.day
-        ).toList();
-
-        // 2. Calculate Pending Actions (Pending Orders + Pending Items in Approved Orders)
         int pendingCount = 0;
         for (var order in box.values) {
           if (!order.isApproved) {
-            // Count the order itself as 1 action
             pendingCount++;
           } else {
-            // It is approved/processed, check for pending/rejected items inside
             for (var item in order.items) {
               if (item.remark.contains("{REORDERED}")) continue;
-              
               int safeOriginal = item.originalQty == 0 ? item.quantity : item.originalQty;
               bool isRejected = !item.isAccepted;
               bool isPartial = item.isAccepted && item.quantity < safeOriginal;
-              
-              if (isRejected || isPartial) {
-                pendingCount++;
-              }
+              if (isRejected || isPartial) pendingCount++;
             }
           }
         }
@@ -246,19 +241,9 @@ class DashboardView extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildClickableStatItem(
-                context, 
-                "${todayOrders.length}", 
-                "Today's Orders",
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 0)))
-              ),
+              _buildClickableStatItem(context, "${todayOrders.length}", "Today's Orders", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 0)))),
               Container(width: 1, height: 40, color: Colors.white30),
-              _buildClickableStatItem(
-                context, 
-                "$pendingCount", 
-                "Pending Actions",
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 1))) // Index 1 is Pending Tab
-              ),
+              _buildClickableStatItem(context, "$pendingCount", "Pending Actions", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 1)))),
             ],
           ),
         );

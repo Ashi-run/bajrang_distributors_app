@@ -10,7 +10,7 @@ import '../../core/services/pdf_service.dart';
 enum OrderSort { dateNewest, dateOldest, amountHigh, amountLow }
 
 class OrderHistoryView extends StatefulWidget {
-  final int initialIndex; // NEW: Allows opening specific tab
+  final int initialIndex; 
   const OrderHistoryView({super.key, this.initialIndex = 0});
 
   @override
@@ -41,7 +41,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
-      initialIndex: widget.initialIndex, // FIX: Open requested tab
+      initialIndex: widget.initialIndex,
       child: Scaffold(
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
@@ -65,9 +65,9 @@ class _OrderHistoryViewState extends State<OrderHistoryView> {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
-              Tab(text: "Orders"),      // Index 0
-              Tab(text: "Pending"),     // Index 1
-              Tab(text: "Approved"),    // Index 2
+              Tab(text: "Orders"),      
+              Tab(text: "Pending"),     
+              Tab(text: "Approved"),    
             ],
           ),
         ),
@@ -273,8 +273,8 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
                     SizedBox(width: 25, child: Padding(padding: const EdgeInsets.only(top: 8), child: Text("${index + 1}.", style: const TextStyle(fontSize: 11)))),
                     Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item.product.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, decoration: !item.isAccepted ? TextDecoration.lineThrough : null, color: !item.isAccepted ? Colors.grey : Colors.black)), if (item.isAccepted) Text("₹${item.total.toStringAsFixed(0)}", style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold))])),
                     if (item.isAccepted) ...[
-                      // QTY
-                      _buildMiniField("${item.quantity}", 35, (v)=>_updateItem(index, qty: int.tryParse(v)??0)), const SizedBox(width: 4),
+                      // QTY - FIXED using _HistoryMiniInput
+                      _HistoryMiniInput(value: "${item.quantity}", width: 35, isNumeric: true, onChanged: (v)=>_updateItem(index, qty: int.tryParse(v)??0)), const SizedBox(width: 4),
                       
                       // UNIT DROPDOWN
                       _buildUnitDropdown(item, index, (val) { 
@@ -289,15 +289,15 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
                          _updateItem(index, uom: val, price: newPrice); 
                       }), const SizedBox(width: 4),
                       
-                      // RATE
+                      // RATE - FIXED using _HistoryMiniInput
                       Column(children: [
-                        _buildMiniField("${item.sellPrice.toStringAsFixed(0)}", 45, (v)=>_updateItem(index, price: double.tryParse(v)??0)), 
+                        _HistoryMiniInput(value: "${item.sellPrice.toStringAsFixed(0)}", width: 45, isNumeric: true, onChanged: (v)=>_updateItem(index, price: double.tryParse(v)??0)), 
                         if(isRateModified) Text("${standardRate.toStringAsFixed(0)}", style: const TextStyle(fontSize: 8, color: Colors.red, decoration: TextDecoration.lineThrough))
                       ]),
                       
-                      // SCHEME & DISC
-                      _buildMiniField(item.scheme, 35, (v)=>_updateItem(index, scheme: v), isText: true), 
-                      _buildMiniField(item.discount > 0 ? "${item.discount}" : "", 35, (v)=>_updateItem(index, discount: double.tryParse(v)??0)),
+                      // SCHEME & DISC - FIXED using _HistoryMiniInput
+                      _HistoryMiniInput(value: item.scheme, width: 35, onChanged: (v)=>_updateItem(index, scheme: v)), 
+                      _HistoryMiniInput(value: item.discount > 0 ? "${item.discount}" : "", width: 35, isNumeric: true, onChanged: (v)=>_updateItem(index, discount: double.tryParse(v)??0)),
                     ] else ...[const Expanded(flex: 5, child: Text("Rejected", textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic)))],
                     SizedBox(width: 25, height: 30, child: Checkbox(value: item.isAccepted, onChanged: (v) => _updateItem(index, accepted: v), activeColor: Colors.blue, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)),
                   ],
@@ -316,23 +316,11 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
     return Container(width: 50, height: 30, padding: EdgeInsets.zero, decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: item.uom, isDense: true, iconSize: 14, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black), items: [DropdownMenuItem(value: item.product.uom, child: Text(item.product.uom)), DropdownMenuItem(value: item.product.secondaryUom, child: Text(item.product.secondaryUom!))], onChanged: (v) { if(v!=null && v!=item.uom) onChanged(v); })));
   }
 
-  Widget _buildMiniField(String val, double w, Function(String) onChange, {bool isText=false}) { 
-    return Container(
-      width: w, height: 30, margin: const EdgeInsets.symmetric(horizontal: 1), 
-      child: TextFormField(
-        key: ValueKey(val), 
-        initialValue: val, 
-        keyboardType: isText ? TextInputType.text : TextInputType.number, 
-        textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), 
-        decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 8), border: OutlineInputBorder(), isDense: true), 
-        onChanged: onChange
-      )
-    ); 
-  }
+  // OLD _buildMiniField removed, new class used below
 }
 
 // ==========================================
-// TAB 2: PENDING ITEMS
+// TAB 2: PENDING ITEMS (UNCHANGED)
 // ==========================================
 class _ItemWisePendingTab extends StatefulWidget {
   const _ItemWisePendingTab();
@@ -402,7 +390,7 @@ class _ItemWisePendingTabState extends State<_ItemWisePendingTab> {
 }
 
 // ==========================================
-// TAB 3: APPROVED ORDERS
+// TAB 3: APPROVED ORDERS (UNCHANGED)
 // ==========================================
 class _ApprovedOrdersTab extends StatefulWidget {
   final Function(BuildContext, Box<OrderModel>, dynamic) onDelete;
@@ -486,7 +474,7 @@ class _ApprovedOrdersTabState extends State<_ApprovedOrdersTab> {
   }
 }
 
-// --- HELPER: CREATE RE-ORDER ---
+// --- HELPER: CREATE RE-ORDER (UNCHANGED) ---
 void _createReOrder(BuildContext context, String custName, ProductModel product, int qty, String uom, double rate, dynamic originalKey, int itemIndex) async {
   final orderBox = Hive.box<OrderModel>('orders_v2');
   final custBox = Hive.box<CustomerModel>('customers_v2');
@@ -509,4 +497,58 @@ void _createReOrder(BuildContext context, String custName, ProductModel product,
     await orderBox.put(originalKey, updatedOrderObj);
   }
   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Re-Order Created!"), backgroundColor: Colors.green, duration: Duration(seconds: 1)));
+}
+
+// --- NEW STABLE MINI FIELD (Fixes Focus Jump) ---
+class _HistoryMiniInput extends StatefulWidget {
+  final String value;
+  final double width;
+  final bool isNumeric;
+  final Function(String) onChanged;
+
+  const _HistoryMiniInput({required this.value, required this.width, required this.onChanged, this.isNumeric = false});
+
+  @override
+  State<_HistoryMiniInput> createState() => _HistoryMiniInputState();
+}
+
+class _HistoryMiniInputState extends State<_HistoryMiniInput> {
+  late TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(_HistoryMiniInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      if (_ctrl.text != widget.value) {
+         if (widget.isNumeric) {
+             if (double.tryParse(_ctrl.text) != double.tryParse(widget.value)) {
+                 _ctrl.text = widget.value;
+             }
+         } else {
+             _ctrl.text = widget.value;
+         }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.width, height: 30, margin: const EdgeInsets.symmetric(horizontal: 1),
+      child: TextFormField(
+        controller: _ctrl, // Uses controller to keep focus
+        keyboardType: widget.isNumeric ? TextInputType.number : TextInputType.text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 8), border: OutlineInputBorder(), isDense: true),
+        onChanged: widget.onChanged,
+      ),
+    );
+  }
 }

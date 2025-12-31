@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/data_repository.dart';
@@ -94,6 +92,7 @@ class _ReadOnlyCatalogViewState extends State<ReadOnlyCatalogView> {
 
   // --- PDF GENERATION ---
   Future<void> _generateGroupPdf(String groupName, Map<String, List<ProductModel>> categories, bool withPrices) async {
+    // 1. Setup PDF Document
     final pdf = pw.Document();
     final fontBold = pw.Font.helveticaBold();
     final fontRegular = pw.Font.helvetica();
@@ -115,7 +114,6 @@ class _ReadOnlyCatalogViewState extends State<ReadOnlyCatalogView> {
                 border: null,
                 headerStyle: pw.TextStyle(font: fontBold, fontSize: 10),
                 cellStyle: pw.TextStyle(font: fontRegular, fontSize: 10),
-                // REMOVED VARIANT COLUMN
                 headers: withPrices ? ['Item Name', 'Unit', 'Price'] : ['Item Name', 'Unit'],
                 data: products.map((p) {
                   return withPrices 
@@ -134,13 +132,15 @@ class _ReadOnlyCatalogViewState extends State<ReadOnlyCatalogView> {
       )
     );
 
+    // 2. Save and Open
     final output = await getTemporaryDirectory();
     final file = io.File("${output.path}/$groupName.pdf");
+    
+    // Always overwrite to ensure fresh prices
     await file.writeAsBytes(await pdf.save());
-    final result = await OpenFile.open(file.path);
-    if (result.type != ResultType.done) {
-      await Share.shareXFiles([XFile(file.path)], text: 'Price List: $groupName');
-    }
+
+    // 3. Open directly (Removed the Share fallback)
+    await OpenFile.open(file.path);
   }
 
   void _showPdfOptions(String groupName, Map<String, List<ProductModel>> categories) {
@@ -148,8 +148,8 @@ class _ReadOnlyCatalogViewState extends State<ReadOnlyCatalogView> {
       context: context, 
       builder: (ctx) => Wrap(
         children: [
-          ListTile(leading: const Icon(Icons.attach_money, color: Colors.green), title: const Text("Generate With Prices"), onTap: () { Navigator.pop(ctx); _generateGroupPdf(groupName, categories, true); }),
-          ListTile(leading: const Icon(Icons.money_off, color: Colors.red), title: const Text("Generate Without Prices"), onTap: () { Navigator.pop(ctx); _generateGroupPdf(groupName, categories, false); })
+          ListTile(leading: const Icon(Icons.attach_money, color: Colors.green), title: const Text("View With Prices"), onTap: () { Navigator.pop(ctx); _generateGroupPdf(groupName, categories, true); }),
+          ListTile(leading: const Icon(Icons.money_off, color: Colors.red), title: const Text("View Without Prices"), onTap: () { Navigator.pop(ctx); _generateGroupPdf(groupName, categories, false); })
         ],
       )
     );
@@ -217,7 +217,6 @@ class _ReadOnlyCatalogViewState extends State<ReadOnlyCatalogView> {
         const SizedBox(width: 15),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          // REMOVED VARIANT TEXT HERE
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text("₹${product.price.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1565C0))), Text("per ${product.uom}", style: const TextStyle(fontSize: 11, color: Colors.grey)), if (hasSecondary) ...[const SizedBox(height: 4), Text("₹${product.price2!.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)), Text("per ${product.secondaryUom}", style: const TextStyle(fontSize: 11, color: Colors.grey))]])
       ]),

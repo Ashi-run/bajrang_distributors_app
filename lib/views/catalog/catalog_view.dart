@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../data/models/product_model.dart';
 import '../../data/models/cart_item_model.dart';
 import '../../data/models/customer_model.dart';
@@ -31,7 +32,7 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
   
   List<ProductModel> _filteredUngrouped = [];
   Map<String, Map<String, List<ProductModel>>> _filteredGroups = {};
-
+  
   String? _expandedGroup;
   CatalogSort _sortOption = CatalogSort.nameAsc;
 
@@ -89,7 +90,9 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
   void _navigateToAddCustomer(String initialName) async {
     final newCustomer = await Navigator.push(context, MaterialPageRoute(builder: (_) => AddCustomerView(initialName: initialName)));
     _loadData(); 
-    if (newCustomer != null && newCustomer is CustomerModel) setState(() => _selectedCustomer = newCustomer);
+    if (newCustomer != null && newCustomer is CustomerModel) {
+      setState(() => _selectedCustomer = newCustomer);
+    }
   }
 
   void _runSearch(String query) {
@@ -150,7 +153,7 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
             ? Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
-                child: Row(children: [const CircleAvatar(radius: 18, backgroundColor: Colors.blue, child: Icon(Icons.person, color: Colors.white, size: 20)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_selectedCustomer!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)), if(_selectedCustomer!.address.isNotEmpty) Text(_selectedCustomer!.address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)])), TextButton.icon(onPressed: () => setState(() => _selectedCustomer = null), icon: const Icon(Icons.close, size: 16), label: const Text("CHANGE"), style: TextButton.styleFrom(foregroundColor: Colors.red))]),
+                child: Row(children: [const CircleAvatar(radius: 18, backgroundColor: Colors.blue, child: Icon(Icons.person, color: Colors.white, size: 20)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_selectedCustomer!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)), if(_selectedCustomer!.address.isNotEmpty) Text(_selectedCustomer!.address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)])), TextButton.icon(onPressed: () => setState(() { _selectedCustomer = null; }), icon: const Icon(Icons.close, size: 16), label: const Text("CHANGE"), style: TextButton.styleFrom(foregroundColor: Colors.red))]),
               )
             : Container(
               padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -211,7 +214,23 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
               ],
             ),
           ),
-          if (cartItems.isNotEmpty) Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -4))]), child: SafeArea(child: Row(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [const Text("TOTAL PAYABLE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)), Text("₹ ${totalPayable.toStringAsFixed(2)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _brandBlue))]), const Spacer(), ElevatedButton.icon(icon: const Icon(Icons.check_circle_outline, size: 20), label: const Text("REVIEW ORDER", style: TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: _brandOrange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CartView(preSelectedCustomer: _selectedCustomer))))]))),
+          if (cartItems.isNotEmpty) 
+            Container(
+              decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -4))]), 
+              child: SafeArea( 
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [const Text("TOTAL PAYABLE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)), Text("₹ ${totalPayable.toStringAsFixed(2)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _brandBlue))]), 
+                      const Spacer(), 
+                      ElevatedButton.icon(icon: const Icon(Icons.check_circle_outline, size: 20), label: const Text("REVIEW ORDER", style: TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: _brandOrange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CartView(preSelectedCustomer: _selectedCustomer))))
+                    ]
+                  ),
+                )
+              )
+            ),
         ],
       ),
     );
@@ -219,10 +238,22 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
 
   Widget _buildProductCard(ProductModel product) {
     final cartItems = ref.watch(cartProvider);
-    final cartItem = cartItems.firstWhere((item) => item.product.id == product.id, orElse: () => CartItem(product: product, quantity: 0, sellPrice: product.price, uom: product.uom, originalQty: 0));
+    final cartItem = cartItems.firstWhere((item) => item.product.id == product.id, orElse: () => CartItem(product: product, quantity: 0, sellPrice: 0.0, uom: product.uom, originalQty: 0));
+    
     String currentUom = cartItem.quantity > 0 ? cartItem.uom : (_activeUom[product.id] ?? product.uom);
-    double displayPrice = product.price;
-    if (cartItem.quantity > 0) { displayPrice = cartItem.sellPrice; } else if (currentUom == product.secondaryUom) { if (product.price2 != null && product.price2! > 0) { displayPrice = product.price2!; } else if (product.conversionFactor != null && product.conversionFactor! > 0) { displayPrice = product.price * product.conversionFactor!; } }
+    
+    // --- EFFECTIVE PRICE (UNIT STRICT) ---
+    // Pass currentUom to get the price SPECIFIC to that unit
+    double effectivePrice = _repo.getEffectivePrice(product, _selectedCustomer?.name, currentUom);
+    
+    double displayPrice = 0.0;
+    
+    if (cartItem.quantity > 0) {
+      displayPrice = cartItem.sellPrice;
+    } else {
+      displayPrice = effectivePrice;
+    }
+
     bool inCart = cartItem.quantity > 0;
     Widget imageWidget = const Icon(Icons.image, color: Colors.grey, size: 30);
     if (product.image.isNotEmpty && io.File(product.image).existsSync()) { imageWidget = Image.file(io.File(product.image), fit: BoxFit.cover, errorBuilder: (c, o, s) => const Icon(Icons.broken_image)); }
@@ -230,7 +261,61 @@ class _BajrangCatalogState extends ConsumerState<BajrangCatalog> {
     return Container(
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade100)), color: inCart ? _brandBlue.withOpacity(0.03) : Colors.white),
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: Column(children: [Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Container(width: 50, height: 50, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(6)), child: ClipRRect(borderRadius: BorderRadius.circular(6), child: imageWidget)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)), /* REMOVED VARIANT */ const SizedBox(height: 6), Row(children: [Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)), child: DropdownButton<String>(value: currentUom, isDense: true, underline: Container(), iconSize: 16, style: TextStyle(color: _brandBlue, fontWeight: FontWeight.bold, fontSize: 12), items: [DropdownMenuItem(value: product.uom, child: Text(product.uom)), if (product.secondaryUom != null) DropdownMenuItem(value: product.secondaryUom!, child: Text(product.secondaryUom!))], onChanged: (val) { if (val != null) { setState(() => _activeUom[product.id] = val); if (inCart) { double newBasePrice = (val == product.secondaryUom) ? ((product.price2 != null && product.price2! > 0) ? product.price2! : product.price * (product.conversionFactor ?? 1)) : product.price; ref.read(cartProvider.notifier).updateUomAndPrice(product, val, newBasePrice); } } })), const SizedBox(width: 8), Text("₹ ", style: TextStyle(fontWeight: FontWeight.bold, color: _brandBlue)), _RateInput(initialRate: displayPrice, onChanged: (newRate) { if (newRate > 0) { if (inCart) { ref.read(cartProvider.notifier).updatePrice(product, newRate); } else { ref.read(cartProvider.notifier).addItem(product); ref.read(cartProvider.notifier).updatePrice(product, newRate); if (currentUom != product.uom) ref.read(cartProvider.notifier).updateUom(product, currentUom); } } })]), if (currentUom == product.secondaryUom && product.secondaryUom != null && product.conversionFactor != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text("ⓘ 1 ${product.secondaryUom} = ${product.conversionFactor} ${product.uom}", style: TextStyle(fontSize: 11, color: _brandOrange, fontWeight: FontWeight.bold)))]))]), const SizedBox(height: 10), Row(children: [Container(height: 36, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: inCart ? _brandBlue : Colors.grey.shade300)), child: Row(children: [IconButton(icon: Icon(Icons.remove, size: 16, color: inCart ? _brandBlue : Colors.grey), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36), onPressed: () => ref.read(cartProvider.notifier).decreaseItem(product)), Container(width: 1, height: 20, color: Colors.grey.shade200), _QuantityInput(key: ValueKey(cartItem.quantity), quantity: cartItem.quantity, onChanged: (newQty) { if (newQty > 0) { if (cartItem.quantity == 0) { double addPrice = (currentUom == product.secondaryUom) ? ((product.price2 != null && product.price2! > 0) ? product.price2! : product.price * (product.conversionFactor ?? 1)) : product.price; ref.read(cartProvider.notifier).addItem(product); if (currentUom != product.uom) ref.read(cartProvider.notifier).updateUomAndPrice(product, currentUom, addPrice); if (newQty > 1) ref.read(cartProvider.notifier).updateQuantity(product, newQty); } else { ref.read(cartProvider.notifier).updateQuantity(product, newQty); } } else if (newQty == 0 && cartItem.quantity > 0) { ref.read(cartProvider.notifier).updateQuantity(product, 0); } }), Container(width: 1, height: 20, color: Colors.grey.shade200), IconButton(icon: const Icon(Icons.add, size: 16, color: Colors.green), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36), onPressed: () { if (cartItem.quantity > 0) { ref.read(cartProvider.notifier).updateQuantity(product, cartItem.quantity + 1); } else { double addPrice = (currentUom == product.secondaryUom) ? ((product.price2 != null && product.price2! > 0) ? product.price2! : product.price * (product.conversionFactor ?? 1)) : product.price; ref.read(cartProvider.notifier).addItem(product); if (currentUom != product.uom) { ref.read(cartProvider.notifier).updateUomAndPrice(product, currentUom, addPrice); } } })])), const SizedBox(width: 8), Expanded(child: TextFormField(initialValue: cartItem.scheme, textAlign: TextAlign.center, decoration: InputDecoration(hintText: "Scheme", isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 8), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300))), onChanged: (v) => ref.read(cartProvider.notifier).updateScheme(product, v))), const SizedBox(width: 5), Expanded(child: TextFormField(initialValue: cartItem.discount > 0 ? "${cartItem.discount}" : "", keyboardType: TextInputType.number, textAlign: TextAlign.center, decoration: InputDecoration(hintText: "Disc", isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 8), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300))), onChanged: (v) => ref.read(cartProvider.notifier).updateDiscount(product, double.tryParse(v) ?? 0)))])]),
+      child: Column(children: [Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Container(width: 50, height: 50, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(6)), child: ClipRRect(borderRadius: BorderRadius.circular(6), child: imageWidget)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(product.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)), const SizedBox(height: 6), Row(children: [Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)), child: DropdownButton<String>(value: currentUom, isDense: true, underline: Container(), iconSize: 16, style: TextStyle(color: _brandBlue, fontWeight: FontWeight.bold, fontSize: 12), items: [DropdownMenuItem(value: product.uom, child: Text(product.uom)), if (product.secondaryUom != null) DropdownMenuItem(value: product.secondaryUom!, child: Text(product.secondaryUom!))], onChanged: (val) { if (val != null) { 
+        setState(() => _activeUom[product.id] = val); 
+        // Force rebuild or specific logic to fetch new effective price happens on next build
+        if (inCart) { 
+          // If in cart, we might want to keep cart price OR recalc. Usually, changing UOM in cart updates price to default/history.
+          double newBasePrice = _repo.getEffectivePrice(product, _selectedCustomer?.name, val);
+          ref.read(cartProvider.notifier).updateUomAndPrice(product, val, newBasePrice); 
+        } 
+      } })), const SizedBox(width: 8), Text("₹ ", style: TextStyle(fontWeight: FontWeight.bold, color: _brandBlue)), 
+            
+            // RATE INPUT
+            _RateInput(
+              initialRate: displayPrice, 
+              onChanged: (newRate) { 
+                if (newRate > 0) { 
+                  if (inCart) { 
+                    ref.read(cartProvider.notifier).updatePrice(product, newRate); 
+                  } else { 
+                    ref.read(cartProvider.notifier).addItem(product, _selectedCustomer); 
+                    ref.read(cartProvider.notifier).updatePrice(product, newRate); 
+                    if (currentUom != product.uom) ref.read(cartProvider.notifier).updateUom(product, currentUom); 
+                  } 
+                } 
+              }
+            ),
+            
+            ]), if (currentUom == product.secondaryUom && product.secondaryUom != null && product.conversionFactor != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text("ⓘ 1 ${product.secondaryUom} = ${product.conversionFactor} ${product.uom}", style: TextStyle(fontSize: 11, color: _brandOrange, fontWeight: FontWeight.bold)))]))]), const SizedBox(height: 10), Row(children: [Container(height: 36, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: inCart ? _brandBlue : Colors.grey.shade300)), child: Row(children: [IconButton(icon: Icon(Icons.remove, size: 16, color: inCart ? _brandBlue : Colors.grey), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36), onPressed: () => ref.read(cartProvider.notifier).decreaseItem(product)), Container(width: 1, height: 20, color: Colors.grey.shade200), 
+            
+            _QuantityInput(quantity: cartItem.quantity, onChanged: (newQty) { 
+              if (newQty > 0) { 
+                if (cartItem.quantity == 0) { 
+                  // Add Item Logic using current UI price
+                  ref.read(cartProvider.notifier).addItem(product, _selectedCustomer); 
+                  ref.read(cartProvider.notifier).updatePrice(product, displayPrice); 
+                  if (currentUom != product.uom) ref.read(cartProvider.notifier).updateUom(product, currentUom); 
+                  if (newQty > 1) ref.read(cartProvider.notifier).updateQuantity(product, newQty); 
+                } else { 
+                  ref.read(cartProvider.notifier).updateQuantity(product, newQty); 
+                } 
+              } else if (newQty == 0 && cartItem.quantity > 0) { 
+                ref.read(cartProvider.notifier).updateQuantity(product, 0); 
+              } 
+            }), 
+            
+            Container(width: 1, height: 20, color: Colors.grey.shade200), 
+            IconButton(icon: const Icon(Icons.add, size: 16, color: Colors.green), padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36), onPressed: () { 
+              if (cartItem.quantity > 0) { 
+                ref.read(cartProvider.notifier).updateQuantity(product, cartItem.quantity + 1); 
+              } else { 
+                // Add Item Logic using current UI price
+                ref.read(cartProvider.notifier).addItem(product, _selectedCustomer); 
+                ref.read(cartProvider.notifier).updatePrice(product, displayPrice); 
+                if (currentUom != product.uom) ref.read(cartProvider.notifier).updateUom(product, currentUom);
+              } 
+            })])), const SizedBox(width: 8), Expanded(child: TextFormField(initialValue: cartItem.scheme, textAlign: TextAlign.center, decoration: InputDecoration(hintText: "Scheme", isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 8), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300))), onChanged: (v) => ref.read(cartProvider.notifier).updateScheme(product, v))), const SizedBox(width: 5), Expanded(child: TextFormField(initialValue: cartItem.discount > 0 ? "${cartItem.discount}" : "", keyboardType: TextInputType.number, textAlign: TextAlign.center, decoration: InputDecoration(hintText: "Disc", isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 8), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300))), onChanged: (v) => ref.read(cartProvider.notifier).updateDiscount(product, double.tryParse(v) ?? 0)))])]),
     );
   }
 }
@@ -264,7 +349,15 @@ class _RateInputState extends State<_RateInput> {
   @override
   void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialRate.toStringAsFixed(0)); }
   @override
-  void didUpdateWidget(_RateInput oldWidget) { super.didUpdateWidget(oldWidget); if (widget.initialRate != oldWidget.initialRate) { double currentInput = double.tryParse(_ctrl.text) ?? 0.0; if (currentInput != widget.initialRate) { _ctrl.text = widget.initialRate.toStringAsFixed(0); } } }
+  void didUpdateWidget(_RateInput oldWidget) { 
+    super.didUpdateWidget(oldWidget); 
+    if (widget.initialRate != oldWidget.initialRate) { 
+      double currentInput = double.tryParse(_ctrl.text) ?? 0.0; 
+      if (currentInput != widget.initialRate) { 
+        _ctrl.text = widget.initialRate.toStringAsFixed(0); 
+      } 
+    } 
+  }
   @override
   Widget build(BuildContext context) { return SizedBox(width: 60, height: 30, child: TextFormField(controller: _ctrl, keyboardType: TextInputType.number, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15), decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.only(bottom: 4), border: UnderlineInputBorder()), onChanged: (val) => widget.onChanged(double.tryParse(val) ?? 0.0))); }
 }

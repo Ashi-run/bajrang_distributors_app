@@ -24,7 +24,6 @@ class PdfService {
   ) async {
     final pdf = pw.Document();
     
-    // Use Helvetica for a clean, professional look
     final fontRegular = pw.Font.helvetica();
     final fontBold = pw.Font.helveticaBold();
 
@@ -35,26 +34,42 @@ class PdfService {
     // SORT ITEMS ALPHABETICALLY
     items.sort((a, b) => a.product.name.compareTo(b.product.name));
 
-    // Helper: Logic for Alternate Quantity
+    // --- UPDATED ALT QTY LOGIC (Strict Major-Minor Format) ---
     String calculateAltQty(CartItem item) {
-      int? factor = item.product.conversionFactor;
+      double? factor = item.product.conversionFactor;
       String? secUom = item.product.secondaryUom;
 
-      if (factor == null || factor <= 1 || secUom == null || secUom.isEmpty) {
+      // If no conversion data, return empty or dash
+      if (factor == null || factor <= 0 || secUom == null) {
         return "-";
       }
 
-      int totalBaseUnits = 0;
+      // 1. Normalize Total Qty to Base Units (e.g. Pcs)
+      double totalBaseQty = item.quantity.toDouble();
       if (item.uom == secUom) {
-        totalBaseUnits = item.quantity * factor;
-      } else {
-        totalBaseUnits = item.quantity;
+        // If ordered in Boxes, convert to Pcs first
+        totalBaseQty = item.quantity * factor;
       }
 
-      int major = totalBaseUnits ~/ factor; 
-      int minor = totalBaseUnits % factor;  
+      // 2. Calculate Split
+      int majorUnits = totalBaseQty ~/ factor; // Boxes
+      double remainder = totalBaseQty % factor; // Loose Pcs
 
-      return "$major-$minor $secUom";
+      // 3. Format Remainder (Remove decimal if .0)
+      String remStr = (remainder % 1 == 0) 
+          ? remainder.toInt().toString() 
+          : remainder.toString();
+
+      // 4. FORMAT: "Major-Minor Unit" (e.g. "5-0 Box")
+      if (majorUnits > 0) {
+        // Even if remainder is 0, we show it (e.g. "5-0")
+        return "$majorUnits-$remStr $secUom";
+      } else {
+        // If less than 1 box (e.g. only 5 pcs when box is 10)
+        // Show "0-5 Box" or just "-" depending on preference. 
+        // Based on your style "1-5", "0-5" is consistent.
+        return "0-$remStr $secUom"; 
+      }
     }
 
     pdf.addPage(
@@ -89,12 +104,11 @@ class PdfService {
             ),
             pw.SizedBox(height: 20),
 
-            // --- 2. INFO ROW (Customer & Order Details) ---
+            // --- 2. INFO ROW ---
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Customer Details (Left)
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -103,7 +117,6 @@ class PdfService {
                     pw.Text(customerName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: brandBlue)),
                   ]
                 ),
-                // Invoice Details (Right)
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
@@ -124,20 +137,19 @@ class PdfService {
 
             // --- 3. PRODUCT TABLE ---
             pw.TableHelper.fromTextArray(
-              border: null, // No grid lines for cleaner look
+              border: null,
               headerDecoration: const pw.BoxDecoration(color: brandBlue),
               headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10),
               rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: lightGrey, width: 0.5))),
               cellPadding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 5),
               cellStyle: const pw.TextStyle(fontSize: 10),
               
-              // Column Alignments
               cellAlignments: {
                 0: pw.Alignment.centerLeft,  // S.No
                 1: pw.Alignment.centerLeft,  // Item
                 2: pw.Alignment.center,      // Qty
-                3: pw.Alignment.center,      // Alt
-                4: pw.Alignment.center,      // Scheme
+                3: pw.Alignment.center,      // Alt Qty
+                4: pw.Alignment.center,      // Sch
                 5: pw.Alignment.centerRight, // Rate
                 6: pw.Alignment.centerRight, // Amt
               },
@@ -146,9 +158,9 @@ class PdfService {
               columnWidths: {
                 0: const pw.FixedColumnWidth(30),  
                 1: const pw.FlexColumnWidth(4),    
-                2: const pw.FixedColumnWidth(50),  
-                3: const pw.FixedColumnWidth(50),  
-                4: const pw.FixedColumnWidth(40),  
+                2: const pw.FixedColumnWidth(45),  
+                3: const pw.FixedColumnWidth(60), // Slightly wider for "10-0 Box"
+                4: const pw.FixedColumnWidth(35),  
                 5: const pw.FixedColumnWidth(50),  
                 6: const pw.FixedColumnWidth(60),  
               },
@@ -158,8 +170,8 @@ class PdfService {
                   "${index + 1}",
                   item.product.name,
                   "${item.quantity} ${item.uom}", 
-                  calculateAltQty(item), 
-                  item.scheme, 
+                  calculateAltQty(item), // <--- Uses "5-0 Box" format
+                  item.scheme ?? "-", 
                   item.sellPrice.toStringAsFixed(0), 
                   item.total.toStringAsFixed(0),
                 ];
@@ -207,7 +219,6 @@ class PdfService {
     return file;
   }
 
-  // 2. OPEN PDF (With Fallback)
   Future<void> openPdf(File file) async {
     final result = await OpenFile.open(file.path);
     if (result.type != ResultType.done) {
@@ -215,7 +226,6 @@ class PdfService {
     }
   }
 
-  // 3. LEGACY SUPPORT
   Future<void> generateAndShareInvoice(
     List<CartItem> items, 
     double totalAmount, 

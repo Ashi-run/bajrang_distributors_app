@@ -1,6 +1,6 @@
 import 'package:hive/hive.dart';
 
-part 'product_model.g.dart'; // Ensure you run: flutter pub run build_runner build
+part 'product_model.g.dart';
 
 @HiveType(typeId: 1)
 class ProductModel {
@@ -10,43 +10,73 @@ class ProductModel {
   @HiveField(1)
   final String name;
 
-  // REMOVED VARIANT FIELD (HiveField 2 was likely variant, skipping it is fine or renumbering)
-
-  @HiveField(3)
+  @HiveField(2)
   final String group;
 
-  @HiveField(4)
+  @HiveField(3)
   final String category;
 
-  @HiveField(5)
-  final double price;
-
-  @HiveField(6)
-  final double? price2;
-
-  @HiveField(7)
+  @HiveField(4)
   final String uom;
 
-  @HiveField(8)
+  @HiveField(5)
+  final double price; // Default Master Price
+
+  @HiveField(6)
+  final String image;
+
+  @HiveField(7)
   final String? secondaryUom;
 
-  @HiveField(9)
-  final int? conversionFactor;
+  @HiveField(8)
+  final double? price2;
 
+  @HiveField(9)
+  final double? conversionFactor;
+  
+  // --- NEW FIELD: Priority 2 (Global Last Sold Price) ---
   @HiveField(10)
-  final String image;
+  final double? lastGlobalSoldPrice; 
 
   ProductModel({
     required this.id,
     required this.name,
-    // Removed variant
     required this.group,
     required this.category,
-    required this.price,
-    this.price2,
     required this.uom,
-    this.secondaryUom,
-    this.conversionFactor,
+    required this.price,
     required this.image,
+    this.secondaryUom,
+    this.price2,
+    this.conversionFactor,
+    this.lastGlobalSoldPrice,
   });
+
+  ProductModel copyWith({
+    String? id,
+    String? name,
+    String? group,
+    String? category,
+    String? uom,
+    double? price,
+    String? image,
+    String? secondaryUom,
+    double? price2,
+    double? conversionFactor,
+    double? lastGlobalSoldPrice,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      group: group ?? this.group,
+      category: category ?? this.category,
+      uom: uom ?? this.uom,
+      price: price ?? this.price,
+      image: image ?? this.image,
+      secondaryUom: secondaryUom ?? this.secondaryUom,
+      price2: price2 ?? this.price2,
+      conversionFactor: conversionFactor ?? this.conversionFactor,
+      lastGlobalSoldPrice: lastGlobalSoldPrice ?? this.lastGlobalSoldPrice,
+    );
+  }
 }

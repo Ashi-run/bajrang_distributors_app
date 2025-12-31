@@ -71,6 +71,22 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
     );
   }
 
+  // --- NEW BUTTON ROW WIDGET ---
+  Widget _buildThreeButtonActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      child: Row(
+        children: [
+          Expanded(child: ElevatedButton(onPressed: () => _showDialog(), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue), child: const Text('Add New'))),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(onPressed: () async { try {String res = await _repo.importCustomerData(); if (mounted) {ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res))); _loadData();}} catch (e) {if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));} }, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.green.shade50, foregroundColor: Colors.green), child: const Text('Import'))),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(onPressed: _loadData, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.orange.shade50, foregroundColor: Colors.orange), child: const Text('Refresh'))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,6 +121,9 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
             ),
           ),
           
+          // ADDED BUTTON ROW HERE
+          _buildThreeButtonActions(),
+
           Expanded(
             child: _filtered.isEmpty 
             ? const Center(child: Text("No customers found", style: TextStyle(color: Colors.grey)))

@@ -38,12 +38,17 @@ class ExcelService {
               return double.tryParse(clean) ?? 0.0;
             }
 
-            int extractFactor(int index) {
-              if (index >= row.length || row[index] == null) return 1;
+            // FIX: Changed return type to double to support decimal factors (e.g. 1.5)
+            double extractFactor(int index) {
+              if (index >= row.length || row[index] == null) return 1.0;
               String val = row[index]!.value.toString();
-              RegExp regExp = RegExp(r'\d+');
+              
+              // Regex now matches integers (e.g. "12") AND decimals (e.g. "12.5")
+              RegExp regExp = RegExp(r'[0-9]+(\.[0-9]+)?');
               Match? match = regExp.firstMatch(val);
-              return match != null ? (int.tryParse(match.group(0)!) ?? 1) : 1;
+              
+              // Parse as double
+              return match != null ? (double.tryParse(match.group(0)!) ?? 1.0) : 1.0;
             }
 
             products.add(ProductModel(
@@ -55,7 +60,7 @@ class ExcelService {
               price: safeDouble(4),   
               image: safeVal(5),      
               secondaryUom: safeVal(6), 
-              conversionFactor: extractFactor(7), 
+              conversionFactor: extractFactor(7), // Now correctly returns a double
               price2: 0.0, 
             ));
           }

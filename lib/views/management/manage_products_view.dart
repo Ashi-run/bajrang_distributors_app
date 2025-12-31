@@ -108,6 +108,22 @@ class _ManageProductsViewState extends State<ManageProductsView> {
   void _showAddOptions() { showModalBottomSheet(context: context, backgroundColor: Colors.white, builder: (ctx) => Wrap(children: [ListTile(leading: const Icon(Icons.add_box, color: Colors.blue), title: const Text("Add Manual"), onTap: (){Navigator.pop(ctx); _addNewItem();}), ListTile(leading: const Icon(Icons.file_upload, color: Colors.green), title: const Text("Import Excel"), onTap: () async {Navigator.pop(ctx); await _repo.importProductData(); _loadData();})])); }
   Widget _buildSafeImage(String? path) { if (path == null || path.isEmpty) return const Icon(Icons.image, size: 40, color: Colors.grey); return Image.file(io.File(path), width: 40, height: 40, fit: BoxFit.cover, cacheWidth: 100, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, size: 40, color: Colors.grey)); }
 
+  // --- NEW BUTTON ROW WIDGET ---
+  Widget _buildThreeButtonActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      child: Row(
+        children: [
+          Expanded(child: ElevatedButton(onPressed: () => _addNewItem(), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue), child: const Text('Add New'))),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(onPressed: () async { await _repo.importProductData(); _loadData(); }, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.green.shade50, foregroundColor: Colors.green), child: const Text('Import'))),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(onPressed: _loadData, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.orange.shade50, foregroundColor: Colors.orange), child: const Text('Refresh'))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isSearching = _searchController.text.isNotEmpty;
@@ -121,6 +137,10 @@ class _ManageProductsViewState extends State<ManageProductsView> {
       body: Column(
         children: [
           Container(padding: const EdgeInsets.all(12), color: Colors.white, child: TextField(controller: _searchController, decoration: InputDecoration(hintText: "Search...", prefixIcon: Icon(Icons.search, color: _brandBlue), suffixIcon: isSearching ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); _runSearch(""); }) : null, filled: true, fillColor: const Color(0xFFE8EAF6), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)), onChanged: _runSearch)),
+          
+          // ADDED THE BUTTON ROW HERE
+          _buildThreeButtonActions(),
+
           Expanded(
             child: ListView(
               padding: const EdgeInsets.only(bottom: 80),

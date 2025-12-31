@@ -55,7 +55,7 @@ class _EditProductViewState extends State<EditProductView> {
       price2: double.tryParse(_price2Ctrl.text),
       uom: _uomCtrl.text,
       secondaryUom: _secUomCtrl.text,
-      conversionFactor: int.tryParse(_factorCtrl.text),
+      conversionFactor: double.tryParse(_factorCtrl.text),
       image: _imagePath,
     );
 

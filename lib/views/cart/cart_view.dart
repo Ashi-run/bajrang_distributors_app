@@ -40,9 +40,7 @@ class _CartViewState extends ConsumerState<CartView> {
     int maxId = 0; 
     for (var order in box.values) {
       int? currentId = int.tryParse(order.id);
-      if (currentId != null && currentId < 900000) { 
-        if (currentId > maxId) maxId = currentId;
-      }
+      if (currentId != null && currentId < 900000 && currentId > maxId) maxId = currentId;
     }
     return (maxId + 1).toString();
   }
@@ -144,8 +142,6 @@ class _CartViewState extends ConsumerState<CartView> {
               itemCount: cartItems.length,
               itemBuilder: (ctx, i) {
                 final item = cartItems[i];
-                
-                // CALCULATE STANDARD PRICE TO CHECK MODIFICATION
                 double standardRate = item.product.price;
                 if (item.uom == item.product.secondaryUom) {
                    standardRate = (item.product.price2 != null && item.product.price2! > 0)
@@ -182,12 +178,12 @@ class _CartViewState extends ConsumerState<CartView> {
                             ),
                             const SizedBox(width: 8),
                             
-                            // RATE INPUT WITH MODIFIED INDICATOR
+                            // RATE INPUT
                             Expanded(
                               flex: 3, 
                               child: Column(
                                 children: [
-                                  _buildInputBox(
+                                  _SmartCartInput(
                                     label: "Rate", 
                                     value: item.sellPrice.toStringAsFixed(0), 
                                     onChanged: (val) => ref.read(cartProvider.notifier).updatePrice(item.product, double.tryParse(val) ?? 0)
@@ -207,9 +203,9 @@ class _CartViewState extends ConsumerState<CartView> {
                             ),
                             
                             const SizedBox(width: 5),
-                            Expanded(flex: 2, child: _buildInputBox(label: "Scheme", value: item.scheme, isText: true, onChanged: (val) => ref.read(cartProvider.notifier).updateScheme(item.product, val))),
+                            Expanded(flex: 2, child: _SmartCartInput(label: "Scheme", value: item.scheme, isNumeric: false, onChanged: (val) => ref.read(cartProvider.notifier).updateScheme(item.product, val))),
                             const SizedBox(width: 5),
-                            Expanded(flex: 2, child: _buildInputBox(label: "Disc", value: item.discount > 0 ? item.discount.toString() : "", onChanged: (val) => ref.read(cartProvider.notifier).updateDiscount(item.product, double.tryParse(val) ?? 0))),
+                            Expanded(flex: 2, child: _SmartCartInput(label: "Disc", value: item.discount > 0 ? item.discount.toString() : "", onChanged: (val) => ref.read(cartProvider.notifier).updateDiscount(item.product, double.tryParse(val) ?? 0))),
                           ],
                         ),
                       ],
@@ -220,18 +216,21 @@ class _CartViewState extends ConsumerState<CartView> {
             ),
           ),
 
-          // BOTTOM
+          // --- FIXED BOTTOM BAR (SAFE AREA) ---
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, -2))]),
-            child: Column(
-              children: [
-                TextField(controller: _remarkCtrl, decoration: const InputDecoration(labelText: "Order Remark", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
-                const SizedBox(height: 10),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Total Payable:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), Text("₹ ${total.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 22))]),
-                const SizedBox(height: 10),
-                SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _placeOrder, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F00), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25))), child: const Text("PLACE ORDER", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
-              ],
+            child: SafeArea( 
+              top: false,
+              child: Column(
+                children: [
+                  TextField(controller: _remarkCtrl, decoration: const InputDecoration(labelText: "Order Remark", border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
+                  const SizedBox(height: 10),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Total Payable:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), Text("₹ ${total.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 22))]),
+                  const SizedBox(height: 10),
+                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _placeOrder, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6F00), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25))), child: const Text("PLACE ORDER", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+                ],
+              ),
             ),
           )
         ],
@@ -248,33 +247,67 @@ class _CartViewState extends ConsumerState<CartView> {
   }
 
   Widget _buildQtyControl(CartItem item) {
-    final TextEditingController qtyCtrl = TextEditingController(text: "${item.quantity}");
-    qtyCtrl.selection = TextSelection.fromPosition(TextPosition(offset: qtyCtrl.text.length));
-    return Column(children: [const Text(" Qty", style: TextStyle(fontSize: 11, color: Colors.transparent)), Row(children: [InkWell(onTap: () => ref.read(cartProvider.notifier).decreaseItem(item.product), child: const CircleAvatar(radius: 14, backgroundColor: Colors.red, child: Icon(Icons.remove, size: 16, color: Colors.white))), const SizedBox(width: 5), SizedBox(width: 35, height: 35, child: TextFormField(key: ValueKey(item.quantity), controller: qtyCtrl, keyboardType: TextInputType.number, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), decoration: const InputDecoration(contentPadding: EdgeInsets.zero, border: UnderlineInputBorder()), onChanged: (val) { int newQty = int.tryParse(val) ?? 0; if (newQty > 0) ref.read(cartProvider.notifier).updateQuantity(item.product, newQty); })), const SizedBox(width: 5), InkWell(onTap: () => ref.read(cartProvider.notifier).updateQuantity(item.product, item.quantity + 1), child: const CircleAvatar(radius: 14, backgroundColor: Colors.green, child: Icon(Icons.add, size: 16, color: Colors.white)))])]);
+    return Column(children: [const Text(" Qty", style: TextStyle(fontSize: 11, color: Colors.transparent)), Row(children: [InkWell(onTap: () => ref.read(cartProvider.notifier).decreaseItem(item.product), child: const CircleAvatar(radius: 14, backgroundColor: Colors.red, child: Icon(Icons.remove, size: 16, color: Colors.white))), const SizedBox(width: 5), SizedBox(width: 35, height: 35, child: _SmartCartInput(label: "", value: "${item.quantity}", isNumeric: true, hideLabel: true, onChanged: (val) { int newQty = int.tryParse(val) ?? 0; if (newQty > 0) ref.read(cartProvider.notifier).updateQuantity(item.product, newQty); })), const SizedBox(width: 5), InkWell(onTap: () => ref.read(cartProvider.notifier).updateQuantity(item.product, item.quantity + 1), child: const CircleAvatar(radius: 14, backgroundColor: Colors.green, child: Icon(Icons.add, size: 16, color: Colors.white)))])]);
+  }
+}
+
+// --- SMART INPUT FIELD (Solves Cursor Jumping) ---
+class _SmartCartInput extends StatefulWidget {
+  final String label;
+  final String value;
+  final Function(String) onChanged;
+  final bool isNumeric;
+  final bool hideLabel;
+
+  const _SmartCartInput({required this.label, required this.value, required this.onChanged, this.isNumeric = true, this.hideLabel = false});
+
+  @override
+  State<_SmartCartInput> createState() => _SmartCartInputState();
+}
+
+class _SmartCartInputState extends State<_SmartCartInput> {
+  late TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value);
   }
 
-  Widget _buildInputBox({required String label, required String value, required Function(String) onChanged, bool isText = false}) {
+  @override
+  void didUpdateWidget(_SmartCartInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) {
+      if (_ctrl.text != widget.value) {
+         if (widget.isNumeric) {
+             if (double.tryParse(_ctrl.text) != double.tryParse(widget.value)) {
+                 _ctrl.text = widget.value;
+             }
+         } else {
+             _ctrl.text = widget.value;
+         }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start, 
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(" $label", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), 
+        if (!widget.hideLabel) Text(" ${widget.label}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
         SizedBox(
-          height: 35, 
+          height: 35,
           child: TextFormField(
-            key: ValueKey(value), // <--- THIS FIXED IT
-            initialValue: value, 
-            keyboardType: isText ? TextInputType.text : TextInputType.number, 
-            textAlign: TextAlign.center, 
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(vertical: 5, horizontal: 5), 
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)), 
-              isDense: true
-            ), 
-            onChanged: onChanged
-          )
-        )
-      ]
+            controller: _ctrl, 
+            keyboardType: widget.isNumeric ? TextInputType.number : TextInputType.text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            decoration: InputDecoration(contentPadding: const EdgeInsets.symmetric(vertical: 5, horizontal: 5), border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)), isDense: true),
+            onChanged: widget.onChanged,
+          ),
+        ),
+      ],
     );
   }
 }

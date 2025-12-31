@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../data/models/cart_item_model.dart';
 import '../data/models/product_model.dart';
+import '../data/models/customer_model.dart';
+import '../data/models/order_model.dart';
 
 final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>((ref) {
   return CartNotifier();
@@ -12,23 +15,65 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   // TOTAL CALCULATION
   double get totalAmount => state.fold(0, (sum, item) => sum + item.total);
 
-  // ADD ITEM
-  void addItem(ProductModel product) {
-    if (!state.any((item) => item.product.id == product.id)) {
-      state = [
-        ...state,
-        CartItem(
-          product: product,
-          quantity: 1,
-          sellPrice: product.price,
-          uom: product.uom,
-          originalQty: 1, // Init matches Quantity
-          scheme: "", 
-          discount: 0,
-          remark: ""
-        )
-      ];
+  // --- ADD ITEM (WITH ADVANCED PRICING LOGIC) ---
+  void addItem(ProductModel product, CustomerModel? customer) {
+    // 1. Check if item is already in cart
+    if (state.any((item) => item.product.id == product.id)) {
+      return; // Already in cart, do nothing (or increment qty if you prefer)
     }
+
+    // 2. Determine Rate based on Priority
+    double finalPrice = product.price; // Default: Priority 3 (Master Price)
+    
+    // Priority 1: Customer Specific History
+    bool foundPersonalHistory = false;
+    if (customer != null && Hive.isBoxOpen('orders_v2')) {
+      final orderBox = Hive.box<OrderModel>('orders_v2');
+      
+      // Get orders for this customer
+      final customerOrders = orderBox.values
+          .where((o) => o.customerName.trim().toLowerCase() == customer.name.trim().toLowerCase())
+          .toList();
+          
+      // Sort newest first
+      customerOrders.sort((a, b) => b.date.compareTo(a.date));
+
+      // Look for the last time they bought THIS product
+      for (var order in customerOrders) {
+        // Check items in that order
+        for (var item in order.items) {
+           // Check by ID or Name (Name is safer if IDs change on re-import)
+           if (item.product.id == product.id || item.product.name == product.name) {
+             finalPrice = item.sellPrice;
+             foundPersonalHistory = true;
+             break; 
+           }
+        }
+        if (foundPersonalHistory) break;
+      }
+    }
+
+    // Priority 2: Global Last Sold Price (Only if no personal history found)
+    if (!foundPersonalHistory) {
+      if (product.lastGlobalSoldPrice != null && product.lastGlobalSoldPrice! > 0) {
+        finalPrice = product.lastGlobalSoldPrice!;
+      }
+    }
+
+    // 3. Add to Cart with calculated price
+    state = [
+      ...state,
+      CartItem(
+        product: product,
+        quantity: 1,
+        sellPrice: finalPrice, // <--- Auto-filled Rate
+        uom: product.uom,
+        originalQty: 1,
+        scheme: "", 
+        discount: 0,
+        remark: ""
+      )
+    ];
   }
 
   // UPDATE QUANTITY
@@ -43,7 +88,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
             uom: item.uom,
             discount: item.discount,
             scheme: item.scheme,
-            originalQty: qty, // FIX: SYNC ORIGINAL QTY WITH CART QTY
+            originalQty: qty, // Sync original
             remark: item.remark
           )
         else
@@ -65,7 +110,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
             uom: item.uom,
             discount: item.discount,
             scheme: schemeText,
-            originalQty: item.originalQty, // Keep synced
+            originalQty: item.originalQty,
             remark: item.remark
           )
         else
@@ -155,7 +200,12 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 
   // DECREASE ITEM
   void decreaseItem(ProductModel product) {
-    final existing = state.firstWhere((i) => i.product.id == product.id, orElse: () => CartItem(product: product, quantity: 0, sellPrice: 0, uom: '', originalQty: 0));
+    // Find item or return dummy
+    final index = state.indexWhere((i) => i.product.id == product.id);
+    if (index == -1) return;
+
+    final existing = state[index];
+    
     if (existing.quantity > 1) {
       updateQuantity(product, existing.quantity - 1);
     } else {

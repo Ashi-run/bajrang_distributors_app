@@ -18,15 +18,16 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
     };
     return ProductModel(
       id: fields[0] as String,
-      group: fields[1] as String,
-      category: fields[2] as String,
-      name: fields[3] as String,
+      name: fields[1] as String,
+      group: fields[2] as String,
+      category: fields[3] as String,
       uom: fields[4] as String,
       price: fields[5] as double,
       image: fields[6] as String,
       secondaryUom: fields[7] as String?,
-      conversionFactor: fields[8] as int?,
-      price2: fields[9] as double?,
+      price2: fields[8] as double?,
+      conversionFactor: fields[9] as double?,
+      lastGlobalSoldPrice: fields[10] as double?,
     );
   }
 
@@ -37,11 +38,11 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.group)
-      ..writeByte(2)
-      ..write(obj.category)
-      ..writeByte(3)
       ..write(obj.name)
+      ..writeByte(2)
+      ..write(obj.group)
+      ..writeByte(3)
+      ..write(obj.category)
       ..writeByte(4)
       ..write(obj.uom)
       ..writeByte(5)
@@ -51,9 +52,11 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       ..writeByte(7)
       ..write(obj.secondaryUom)
       ..writeByte(8)
-      ..write(obj.conversionFactor)
+      ..write(obj.price2)
       ..writeByte(9)
-      ..write(obj.price2);
+      ..write(obj.conversionFactor)
+      ..writeByte(10)
+      ..write(obj.lastGlobalSoldPrice);
   }
 
   @override

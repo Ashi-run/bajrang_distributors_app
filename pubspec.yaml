@@ -2,7 +2,7 @@ name: bajrang_dist_app
 description: "Offline Digital Catalog & Order Booking App"
 publish_to: 'none' # Prevent accidental publishing to pub.dev
 
-version: 1.0.1+9
+version: 1.0.1+10
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

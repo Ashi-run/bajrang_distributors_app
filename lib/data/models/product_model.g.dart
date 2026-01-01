@@ -22,12 +22,12 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       group: fields[2] as String,
       category: fields[3] as String,
       uom: fields[4] as String,
-      price: fields[5] as double,
+      price: fields[5] as dynamic,
       image: fields[6] as String,
       secondaryUom: fields[7] as String?,
-      price2: fields[8] as double?,
-      conversionFactor: fields[9] as double?,
-      lastGlobalSoldPrice: fields[10] as double?,
+      price2: fields[8] as dynamic,
+      conversionFactor: fields[9] as dynamic,
+      lastGlobalSoldPrice: fields[10] as dynamic,
     );
   }
 

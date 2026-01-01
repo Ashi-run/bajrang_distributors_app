@@ -19,8 +19,9 @@ class ProductModel {
   @HiveField(4)
   final String uom;
 
+  // --- USE DYNAMIC TO PREVENT CRASHES ---
   @HiveField(5)
-  final double price; // Default Master Price
+  final dynamic price; 
 
   @HiveField(6)
   final String image;
@@ -29,14 +30,13 @@ class ProductModel {
   final String? secondaryUom;
 
   @HiveField(8)
-  final double? price2;
+  final dynamic price2; 
 
   @HiveField(9)
-  final double? conversionFactor;
-  
-  // --- NEW FIELD: Priority 2 (Global Last Sold Price) ---
+  final dynamic conversionFactor; 
+
   @HiveField(10)
-  final double? lastGlobalSoldPrice; 
+  final dynamic lastGlobalSoldPrice; 
 
   ProductModel({
     required this.id,
@@ -52,18 +52,30 @@ class ProductModel {
     this.lastGlobalSoldPrice,
   });
 
+  // --- STATIC HELPER: SAFELY CONVERT DATA TO DOUBLE ---
+  static double toDoubleSafe(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      String clean = value.replaceAll(RegExp(r'[^0-9.]'), '');
+      return double.tryParse(clean) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   ProductModel copyWith({
     String? id,
     String? name,
     String? group,
     String? category,
     String? uom,
-    double? price,
+    dynamic price,
     String? image,
     String? secondaryUom,
-    double? price2,
-    double? conversionFactor,
-    double? lastGlobalSoldPrice,
+    dynamic price2,
+    dynamic conversionFactor,
+    dynamic lastGlobalSoldPrice,
   }) {
     return ProductModel(
       id: id ?? this.id,

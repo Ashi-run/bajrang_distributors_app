@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../data/models/order_model.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/cart_item_model.dart';
+import '../../data/models/product_model.dart'; 
 import '../../data/repositories/data_repository.dart';
 import '../../viewmodels/cart_provider.dart';
 import '../dashboard/dashboard_view.dart';
@@ -35,14 +36,38 @@ class _CartViewState extends ConsumerState<CartView> {
     });
   }
 
+  // --- FIXED: MONTHLY RESET LOGIC ---
   String _generateOrderId() {
     final box = Hive.box<OrderModel>('orders_v2');
-    int maxId = 0; 
+    final now = DateTime.now();
+    
+    // 1. Create a "Month Prefix" (e.g., "202601" for Jan 2026)
+    // format: YYYYMM
+    String prefix = "${now.year}${now.month.toString().padLeft(2, '0')}";
+    
+    int maxSeq = 0;
+    
+    // 2. Find the highest sequence ONLY for the current month
     for (var order in box.values) {
-      int? currentId = int.tryParse(order.id);
-      if (currentId != null && currentId < 900000 && currentId > maxId) maxId = currentId;
+      if (order.id.startsWith(prefix)) {
+        try {
+          // The ID looks like "2026010001". 
+          // We assume the first 6 chars are the date, the rest is the sequence.
+          if (order.id.length > 6) {
+             int seq = int.parse(order.id.substring(6)); 
+             if (seq > maxSeq) maxSeq = seq;
+          }
+        } catch (e) {
+          // Ignore old or malformed IDs
+        }
+      }
     }
-    return (maxId + 1).toString();
+    
+    // 3. Increment (Start at 1 if new month, else max + 1)
+    int newSeq = maxSeq + 1;
+    
+    // 4. Return Format: YYYYMM + 0001 (e.g., 2026010001)
+    return "$prefix${newSeq.toString().padLeft(4, '0')}";
   }
 
   void _placeOrder() async {
@@ -73,7 +98,9 @@ class _CartViewState extends ConsumerState<CartView> {
     ref.read(cartProvider.notifier).clearCart();
 
     if (mounted) {
-      String displayId = permanentId.padLeft(4, '0');
+      // Logic to show just "0001" in the popup message
+      String displayId = permanentId.length > 6 ? permanentId.substring(6) : permanentId;
+      
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Order #$displayId Placed Successfully!")));
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const DashboardView()), (r) => false);
     }
@@ -93,7 +120,6 @@ class _CartViewState extends ConsumerState<CartView> {
       ),
       body: Column(
         children: [
-          // CUSTOMER SELECT
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.blue.shade50,
@@ -135,19 +161,15 @@ class _CartViewState extends ConsumerState<CartView> {
             ),
           ),
 
-          // LIST
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(10),
               itemCount: cartItems.length,
               itemBuilder: (ctx, i) {
                 final item = cartItems[i];
-                double standardRate = item.product.price;
-                if (item.uom == item.product.secondaryUom) {
-                   standardRate = (item.product.price2 != null && item.product.price2! > 0)
-                      ? item.product.price2!
-                      : item.product.price * (item.product.conversionFactor ?? 1);
-                }
+                
+                // Show "List Price" hint
+                double standardRate = _repo.getEffectivePrice(item.product, _selectedCustomer?.name, item.uom);
                 bool isRateModified = (item.sellPrice - standardRate).abs() > 0.1;
 
                 return Card(
@@ -178,7 +200,6 @@ class _CartViewState extends ConsumerState<CartView> {
                             ),
                             const SizedBox(width: 8),
                             
-                            // RATE INPUT
                             Expanded(
                               flex: 3, 
                               child: Column(
@@ -216,7 +237,6 @@ class _CartViewState extends ConsumerState<CartView> {
             ),
           ),
 
-          // --- FIXED BOTTOM BAR (SAFE AREA) ---
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, -2))]),
@@ -238,12 +258,32 @@ class _CartViewState extends ConsumerState<CartView> {
     );
   }
 
-  // --- HELPERS ---
   Widget _buildUomDropdown(CartItem item) {
     if (item.product.secondaryUom == null || item.product.secondaryUom!.isEmpty) {
       return Padding(padding: const EdgeInsets.only(bottom: 8.0, right: 5), child: Text(item.uom, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)));
     }
-    return Column(children: [const Text(" Unit", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Container(height: 35, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: item.uom, isDense: true, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13), items: [DropdownMenuItem(value: item.product.uom, child: Text(item.product.uom)), DropdownMenuItem(value: item.product.secondaryUom!, child: Text(item.product.secondaryUom!))], onChanged: (val) { if (val != null && val != item.uom) { double newPrice = (val == item.product.secondaryUom) ? (item.product.price2 ?? item.product.price * (item.product.conversionFactor ?? 1)) : item.product.price; ref.read(cartProvider.notifier).updateUomAndPrice(item.product, val, newPrice); }})))]);
+    return Column(children: [const Text(" Unit", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)), Container(height: 35, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: item.uom, isDense: true, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13), items: [DropdownMenuItem(value: item.product.uom, child: Text(item.product.uom)), DropdownMenuItem(value: item.product.secondaryUom!, child: Text(item.product.secondaryUom!))], onChanged: (val) { 
+      if (val != null && val != item.uom) { 
+        // --- HYBRID LOGIC (Kept from previous fix) ---
+        double standardPriceCurrent = _repo.getEffectivePrice(item.product, _selectedCustomer?.name, item.uom);
+        bool isManual = (item.sellPrice - standardPriceCurrent).abs() > 0.1;
+        double newPrice;
+        if (isManual) {
+           double factor = ProductModel.toDoubleSafe(item.product.conversionFactor);
+           if (factor <= 0) factor = 1.0;
+           if (item.uom == item.product.uom && val == item.product.secondaryUom) {
+             newPrice = item.sellPrice * factor;
+           } else if (item.uom == item.product.secondaryUom && val == item.product.uom) {
+             newPrice = item.sellPrice / factor;
+           } else {
+             newPrice = item.sellPrice;
+           }
+        } else {
+           newPrice = _repo.getEffectivePrice(item.product, _selectedCustomer?.name, val);
+        }
+        ref.read(cartProvider.notifier).updateUomAndPrice(item.product, val, newPrice); 
+      }
+    })))]);
   }
 
   Widget _buildQtyControl(CartItem item) {
@@ -251,7 +291,6 @@ class _CartViewState extends ConsumerState<CartView> {
   }
 }
 
-// --- SMART INPUT FIELD (Solves Cursor Jumping) ---
 class _SmartCartInput extends StatefulWidget {
   final String label;
   final String value;

@@ -36,7 +36,7 @@ class PdfService {
 
     // --- UPDATED ALT QTY LOGIC (Strict Major-Minor Format) ---
     String calculateAltQty(CartItem item) {
-      double? factor = item.product.conversionFactor;
+      double? factor = item.product.conversionFactor?.toDouble();
       String? secUom = item.product.secondaryUom;
 
       // If no conversion data, return empty or dash

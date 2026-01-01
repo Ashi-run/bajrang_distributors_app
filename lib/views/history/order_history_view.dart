@@ -9,6 +9,14 @@ import '../../core/services/pdf_service.dart';
 
 enum OrderSort { dateNewest, dateOldest, amountHigh, amountLow }
 
+// --- HELPER FUNCTION TO SHORTEN IDs ---
+String getShortId(String fullId) {
+  if (fullId.length > 6 && fullId.startsWith("20")) {
+    return fullId.substring(6); // Returns "0004"
+  }
+  return fullId.padLeft(4, '0');
+}
+
 class OrderHistoryView extends StatefulWidget {
   final int initialIndex; 
   const OrderHistoryView({super.key, this.initialIndex = 0});
@@ -137,7 +145,7 @@ class _PendingOrdersTabState extends State<_PendingOrdersTab> {
           itemBuilder: (context, index) {
             final order = orders[index];
             final key = box.keys.firstWhere((k) => box.get(k) == order);
-            String displayId = order.id.padLeft(4, '0');
+            String displayId = getShortId(order.id);
             String address = _getAddress(order.customerName);
 
             return Card(
@@ -171,7 +179,6 @@ class _PendingOrdersTabState extends State<_PendingOrdersTab> {
   }
 }
 
-// --- WIDGET: INLINE ORDER PROCESSOR ---
 class _InlineOrderProcessor extends StatefulWidget {
   final OrderModel order;
   final dynamic orderKey;
@@ -230,7 +237,7 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
       totalAmount: _liveTotal, 
       discount: widget.order.discount,
       items: _items,
-      isApproved: true, 
+      isApproved: true, // Moves items to Pending tab if rejected, or Approved tab if accepted
     );
 
     await box.put(widget.orderKey, updatedOrder);
@@ -238,11 +245,22 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
     if (!mounted) return;
 
     if (!hasItems) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Rejected (Moved to Pending List)"), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All items rejected. Moved to 'Pending' tab."), backgroundColor: Colors.orange));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Approved!")));
-      int? seqId = int.tryParse(widget.order.id);
-      final file = await PdfService().generatePdfFile(_items.where((i) => i.isAccepted && i.quantity > 0).toList(), _liveTotal, widget.order.id, widget.order.customerName, sequenceNumber: seqId ?? 1);
+      
+      // --- FIX: USE SHORT ID FOR PDF ---
+      final shortId = getShortId(widget.order.id);
+      int seqId = 1;
+      try { seqId = int.parse(shortId); } catch (_) {}
+
+      final file = await PdfService().generatePdfFile(
+        _items.where((i) => i.isAccepted && i.quantity > 0).toList(), 
+        _liveTotal, 
+        shortId, // Passing 4 digit ID
+        widget.order.customerName, 
+        sequenceNumber: seqId
+      );
       await PdfService().openPdf(file);
     }
   }
@@ -259,11 +277,13 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
             shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: _items.length,
             itemBuilder: (context, index) {
               final item = _items[index];
-              bool isShortage = item.quantity < item.originalQty;
-              double standardRate = item.product.price;
-              if (item.uom == item.product.secondaryUom) { standardRate = (item.product.price2 != null && item.product.price2! > 0) ? item.product.price2! : item.product.price * (item.product.conversionFactor ?? 1); }
+              double standardRate = item.product.price.toDouble();
+              if (item.uom == item.product.secondaryUom) { 
+                standardRate = (item.product.price2 != null && item.product.price2! > 0) 
+                    ? item.product.price2!.toDouble() 
+                    : (item.product.price * (item.product.conversionFactor ?? 1)).toDouble(); 
+              }
               bool isRateModified = (item.sellPrice - standardRate).abs() > 0.1;
-
               return Container(
                 decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade100))),
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 5),
@@ -273,29 +293,22 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
                     SizedBox(width: 25, child: Padding(padding: const EdgeInsets.only(top: 8), child: Text("${index + 1}.", style: const TextStyle(fontSize: 11)))),
                     Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item.product.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, decoration: !item.isAccepted ? TextDecoration.lineThrough : null, color: !item.isAccepted ? Colors.grey : Colors.black)), if (item.isAccepted) Text("₹${item.total.toStringAsFixed(0)}", style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold))])),
                     if (item.isAccepted) ...[
-                      // QTY - FIXED using _HistoryMiniInput
                       _HistoryMiniInput(value: "${item.quantity}", width: 35, isNumeric: true, onChanged: (v)=>_updateItem(index, qty: int.tryParse(v)??0)), const SizedBox(width: 4),
-                      
-                      // UNIT DROPDOWN
                       _buildUnitDropdown(item, index, (val) { 
                          double newPrice;
                          if (val == widget.order.items[index].uom) {
                            newPrice = widget.order.items[index].sellPrice;
                          } else {
                            newPrice = (val == item.product.secondaryUom) 
-                              ? (item.product.price2 ?? item.product.price * (item.product.conversionFactor ?? 1)) 
-                              : item.product.price; 
+                              ? (item.product.price2?.toDouble() ?? (item.product.price * (item.product.conversionFactor ?? 1)).toDouble()) 
+                              : item.product.price.toDouble(); 
                          }
                          _updateItem(index, uom: val, price: newPrice); 
                       }), const SizedBox(width: 4),
-                      
-                      // RATE - FIXED using _HistoryMiniInput
                       Column(children: [
                         _HistoryMiniInput(value: "${item.sellPrice.toStringAsFixed(0)}", width: 45, isNumeric: true, onChanged: (v)=>_updateItem(index, price: double.tryParse(v)??0)), 
                         if(isRateModified) Text("${standardRate.toStringAsFixed(0)}", style: const TextStyle(fontSize: 8, color: Colors.red, decoration: TextDecoration.lineThrough))
                       ]),
-                      
-                      // SCHEME & DISC - FIXED using _HistoryMiniInput
                       _HistoryMiniInput(value: item.scheme, width: 35, onChanged: (v)=>_updateItem(index, scheme: v)), 
                       _HistoryMiniInput(value: item.discount > 0 ? "${item.discount}" : "", width: 35, isNumeric: true, onChanged: (v)=>_updateItem(index, discount: double.tryParse(v)??0)),
                     ] else ...[const Expanded(flex: 5, child: Text("Rejected", textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic)))],
@@ -315,12 +328,10 @@ class _InlineOrderProcessorState extends State<_InlineOrderProcessor> {
     if (item.product.secondaryUom == null || item.product.secondaryUom!.isEmpty) return SizedBox(width: 50, child: Center(child: Text(item.uom, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))));
     return Container(width: 50, height: 30, padding: EdgeInsets.zero, decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: item.uom, isDense: true, iconSize: 14, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black), items: [DropdownMenuItem(value: item.product.uom, child: Text(item.product.uom)), DropdownMenuItem(value: item.product.secondaryUom, child: Text(item.product.secondaryUom!))], onChanged: (v) { if(v!=null && v!=item.uom) onChanged(v); })));
   }
-
-  // OLD _buildMiniField removed, new class used below
 }
 
 // ==========================================
-// TAB 2: PENDING ITEMS (UNCHANGED)
+// TAB 2: PENDING ITEMS (Shows Rejected)
 // ==========================================
 class _ItemWisePendingTab extends StatefulWidget {
   const _ItemWisePendingTab();
@@ -332,14 +343,29 @@ class _ItemWisePendingTab extends StatefulWidget {
 class _ItemWisePendingTabState extends State<_ItemWisePendingTab> {
   String? _expandedProduct;
 
+  // --- FIX: REMOVE ITEM LOGIC ---
   void _removePendingItem(Box<OrderModel> box, dynamic orderKey, int itemIndex) async {
     final OrderModel? order = box.get(orderKey);
     if(order == null) return;
+    
+    // We clone the list so we can modify it
     final updatedItems = List<CartItem>.from(order.items);
-    final oldItem = updatedItems[itemIndex];
-    updatedItems[itemIndex] = CartItem(product: oldItem.product, quantity: oldItem.quantity, sellPrice: oldItem.sellPrice, scheme: oldItem.scheme, discount: oldItem.discount, uom: oldItem.uom, isAccepted: oldItem.isAccepted, originalQty: oldItem.originalQty, remark: "{REORDERED} ${oldItem.remark}");
-    final updatedOrder = OrderModel(id: order.id, customerName: order.customerName, customerPhone: order.customerPhone, date: order.date, totalAmount: order.totalAmount, discount: order.discount, items: updatedItems, isApproved: true);
-    await box.put(orderKey, updatedOrder);
+    
+    // --- KEY FIX: DELETE THE ITEM FROM THE OLD ORDER ---
+    // Previously we just renamed it. Now we remove it.
+    if (itemIndex < updatedItems.length) {
+      updatedItems.removeAt(itemIndex);
+    }
+    
+    if (updatedItems.isEmpty) {
+      // If the old order is now empty, DELETE THE ORDER from database
+      // This stops it from counting as a "Ghost Order" (2 orders)
+      await box.delete(orderKey);
+    } else {
+      // Otherwise, save the order with the remaining items
+      final updatedOrder = OrderModel(id: order.id, customerName: order.customerName, customerPhone: order.customerPhone, date: order.date, totalAmount: order.totalAmount, discount: order.discount, items: updatedItems, isApproved: true);
+      await box.put(orderKey, updatedOrder);
+    }
   }
 
   @override
@@ -351,9 +377,10 @@ class _ItemWisePendingTabState extends State<_ItemWisePendingTab> {
         for (var key in box.keys) {
           final order = box.get(key)!;
           if (!order.isApproved) continue; 
+          
           for (int j = 0; j < order.items.length; j++) {
             final item = order.items[j];
-            if (item.remark.contains("{REORDERED}")) continue;
+            // No need to check for {REORDERED} because we delete those now
             
             bool isRejected = (!item.isAccepted);
             int safeOriginal = item.originalQty == 0 ? item.quantity : item.originalQty;
@@ -390,7 +417,7 @@ class _ItemWisePendingTabState extends State<_ItemWisePendingTab> {
 }
 
 // ==========================================
-// TAB 3: APPROVED ORDERS (UNCHANGED)
+// TAB 3: APPROVED ORDERS
 // ==========================================
 class _ApprovedOrdersTab extends StatefulWidget {
   final Function(BuildContext, Box<OrderModel>, dynamic) onDelete;
@@ -408,8 +435,19 @@ class _ApprovedOrdersTabState extends State<_ApprovedOrdersTab> {
     final pdfService = PdfService();
     final validItems = order.items.where((i) => i.isAccepted && i.quantity > 0).toList();
     if(validItems.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No items to print!"))); return; }
-    int seqId = int.tryParse(order.id) ?? 0;
-    final file = await pdfService.generatePdfFile(validItems, order.totalAmount, order.id, order.customerName, sequenceNumber: seqId);
+    
+    // --- FIX: USE SHORT ID FOR PDF ---
+    final shortId = getShortId(order.id);
+    int seqId = 1;
+    try { seqId = int.parse(shortId); } catch (_) {}
+
+    final file = await pdfService.generatePdfFile(
+      validItems, 
+      order.totalAmount, 
+      shortId, // Passing 4 digit ID
+      order.customerName, 
+      sequenceNumber: seqId
+    );
     await pdfService.openPdf(file);
   }
 
@@ -438,7 +476,7 @@ class _ApprovedOrdersTabState extends State<_ApprovedOrdersTab> {
           itemBuilder: (context, index) {
             final order = orders[index];
             final key = box.keys.firstWhere((k) => box.get(k) == order);
-            String displayId = order.id.padLeft(4, '0');
+            String displayId = getShortId(order.id);
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -474,32 +512,64 @@ class _ApprovedOrdersTabState extends State<_ApprovedOrdersTab> {
   }
 }
 
-// --- HELPER: CREATE RE-ORDER (UNCHANGED) ---
+// --- HELPER: CREATE RE-ORDER ---
 void _createReOrder(BuildContext context, String custName, ProductModel product, int qty, String uom, double rate, dynamic originalKey, int itemIndex) async {
   final orderBox = Hive.box<OrderModel>('orders_v2');
   final custBox = Hive.box<CustomerModel>('customers_v2');
   final customer = custBox.values.firstWhere((c) => c.name == custName, orElse: () => CustomerModel(id: '', name: custName, phone: '', address: ''));
-  int maxId = 0;
-  for (var o in orderBox.values) {
-    int? cid = int.tryParse(o.id);
-    if (cid != null && cid < 900000 && cid > maxId) maxId = cid;
+  
+  // --- SMART ID LOGIC ---
+  final now = DateTime.now();
+  String monthPrefix = "${now.year}${now.month.toString().padLeft(2, '0')}";
+  int maxSeq = 0;
+  
+  for (var order in orderBox.values) {
+    if (order.id.startsWith(monthPrefix)) {
+      if (order.id.length > 6) {
+         try {
+           int seq = int.parse(order.id.substring(6)); 
+           if (seq > maxSeq) maxSeq = seq;
+         } catch (e) {
+           // ignore invalid ids
+         }
+      }
+    }
   }
-  String nextId = (maxId + 1).toString();
+  
+  int newSeq = maxSeq + 1;
+  String nextId = "$monthPrefix${newSeq.toString().padLeft(4, '0')}";
+
   final newItem = CartItem(product: product, quantity: qty, sellPrice: rate, uom: uom, originalQty: qty, scheme: "", discount: 0, remark: "Refill");
   final newOrder = OrderModel(id: nextId, customerName: customer.name, customerPhone: customer.phone, date: DateTime.now(), totalAmount: newItem.total, discount: 0, items: [newItem], isApproved: false);
+  
+  // 1. ADD NEW ORDER (This creates the new "Order 1")
   await orderBox.add(newOrder);
+  
+  // 2. CLEAN UP OLD ORDER (This prevents "Order 2" / Ghost Order)
   final OrderModel? freshOldOrder = orderBox.get(originalKey);
   if (freshOldOrder != null) {
     final updatedItems = List<CartItem>.from(freshOldOrder.items);
-    final oldItem = updatedItems[itemIndex];
-    updatedItems[itemIndex] = CartItem(product: oldItem.product, quantity: oldItem.quantity, sellPrice: oldItem.sellPrice, scheme: oldItem.scheme, discount: oldItem.discount, remark: "{REORDERED} ${oldItem.remark}", uom: oldItem.uom, isAccepted: oldItem.isAccepted, originalQty: oldItem.originalQty);
-    final updatedOrderObj = OrderModel(id: freshOldOrder.id, customerName: freshOldOrder.customerName, customerPhone: freshOldOrder.customerPhone, date: freshOldOrder.date, totalAmount: freshOldOrder.totalAmount, discount: freshOldOrder.discount, items: updatedItems, isApproved: true);
-    await orderBox.put(originalKey, updatedOrderObj);
+    
+    // --- KEY FIX: DELETE THE ITEM FROM THE OLD ORDER ---
+    if (itemIndex < updatedItems.length) {
+      updatedItems.removeAt(itemIndex);
+    }
+
+    if (updatedItems.isEmpty) {
+      // IF THE OLD ORDER HAS NO MORE ITEMS, DELETE THE ORDER FROM DATABASE
+      // This is the line that fixes your dashboard count
+      await orderBox.delete(originalKey);
+    } else {
+      // If there are other items left (e.g., partial re-order), update the old order
+      final updatedOrderObj = OrderModel(id: freshOldOrder.id, customerName: freshOldOrder.customerName, customerPhone: freshOldOrder.customerPhone, date: freshOldOrder.date, totalAmount: freshOldOrder.totalAmount, discount: freshOldOrder.discount, items: updatedItems, isApproved: true);
+      await orderBox.put(originalKey, updatedOrderObj);
+    }
   }
+  
   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Re-Order Created!"), backgroundColor: Colors.green, duration: Duration(seconds: 1)));
 }
 
-// --- NEW STABLE MINI FIELD (Fixes Focus Jump) ---
+// --- HISTORY MINI INPUT ---
 class _HistoryMiniInput extends StatefulWidget {
   final String value;
   final double width;
@@ -542,7 +612,7 @@ class _HistoryMiniInputState extends State<_HistoryMiniInput> {
     return Container(
       width: widget.width, height: 30, margin: const EdgeInsets.symmetric(horizontal: 1),
       child: TextFormField(
-        controller: _ctrl, // Uses controller to keep focus
+        controller: _ctrl, 
         keyboardType: widget.isNumeric ? TextInputType.number : TextInputType.text,
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),

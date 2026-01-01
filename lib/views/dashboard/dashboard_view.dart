@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../data/models/order_model.dart';
+
+// --- YOUR CORRECT IMPORTS ---
 import '../management/manage_products_view.dart';
 import '../management/manage_customers_view.dart';
+
 import '../catalog/catalog_view.dart';
 import '../history/order_history_view.dart';
 import '../catalog/read_only_catalog_view.dart';
@@ -33,9 +36,9 @@ class DashboardView extends StatelessWidget {
             SizedBox(height: 20),
             Divider(),
             SizedBox(height: 10),
-            Text("Designed & Developed by", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text("Developed by", style: TextStyle(fontSize: 12, color: Colors.grey)),
             SizedBox(height: 4),
-            Text("Ashi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
+            Text("Ashi Sharma", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
             SizedBox(height: 4),
             Text("© 2025 All Rights Reserved", style: TextStyle(fontSize: 10, color: Colors.grey)),
           ],
@@ -156,6 +159,7 @@ class DashboardView extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 25),
+                // --- LIVE STATS SECTION ---
                 _buildQuickStats(context),
               ],
             ),
@@ -213,25 +217,44 @@ class DashboardView extends StatelessWidget {
     );
   }
 
+  // --- FIXED LIVE STATS ---
   Widget _buildQuickStats(BuildContext context) {
     return ValueListenableBuilder(
       valueListenable: Hive.box<OrderModel>('orders_v2').listenable(),
       builder: (context, Box<OrderModel> box, _) {
         final today = DateTime.now();
-        final todayOrders = box.values.where((o) => o.date.year == today.year && o.date.month == today.month && o.date.day == today.day).toList();
         
+        // 1. Calculate Today's Orders
+        final todayOrders = box.values.where((o) => 
+          o.date.year == today.year && 
+          o.date.month == today.month && 
+          o.date.day == today.day
+        ).toList();
+        
+        // 2. Calculate Pending Orders (Robust Logic)
         int pendingCount = 0;
         for (var order in box.values) {
+          // Condition 1: Order is not approved yet (Pending)
           if (!order.isApproved) {
             pendingCount++;
           } else {
+            // Condition 2: Order is approved but has rejected/partial items
+            // (Optional: You can remove this 'else' block if you ONLY want to count unapproved orders)
+            bool hasIssues = false;
             for (var item in order.items) {
-              if (item.remark.contains("{REORDERED}")) continue;
-              int safeOriginal = item.originalQty == 0 ? item.quantity : item.originalQty;
-              bool isRejected = !item.isAccepted;
-              bool isPartial = item.isAccepted && item.quantity < safeOriginal;
-              if (isRejected || isPartial) pendingCount++;
+               // Safe Null Check Added (?? "")
+               if ((item.remark ?? "").contains("{REORDERED}")) continue;
+               
+               int safeOriginal = item.originalQty == 0 ? item.quantity : item.originalQty;
+               bool isRejected = !item.isAccepted;
+               bool isPartial = item.isAccepted && item.quantity < safeOriginal;
+               
+               if (isRejected || isPartial) {
+                 hasIssues = true;
+                 break; 
+               }
             }
+            if (hasIssues) pendingCount++;
           }
         }
         
@@ -241,9 +264,19 @@ class DashboardView extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildClickableStatItem(context, "${todayOrders.length}", "Today's Orders", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 0)))),
+              _buildClickableStatItem(
+                context, 
+                "${todayOrders.length}", 
+                "Today's Orders", 
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 0)))
+              ),
               Container(width: 1, height: 40, color: Colors.white30),
-              _buildClickableStatItem(context, "$pendingCount", "Pending Actions", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 1)))),
+              _buildClickableStatItem(
+                context, 
+                "$pendingCount", 
+                "Pending Actions", 
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderHistoryView(initialIndex: 1)))
+              ),
             ],
           ),
         );

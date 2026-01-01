@@ -15,7 +15,6 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
   List<CustomerModel> _filtered = [];
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // Theme
   final Color _brandBlue = const Color(0xFF1A237E); 
 
   @override
@@ -26,7 +25,6 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
 
   void _loadData() {
     final data = _repo.getAllCustomers();
-    // Sort A-Z
     data.sort((a,b) => a.name.compareTo(b.name));
     setState(() {
       _customers = data;
@@ -62,6 +60,15 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(onPressed: () async {
             if (nameCtrl.text.isEmpty) return;
+            
+            // --- NEW: DUPLICATE CHECK FOR MANUAL ADD ---
+            if (customer == null) { // Only check if adding a new customer
+               if (_repo.checkCustomerExists(nameCtrl.text)) {
+                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Customer name already exists!"), backgroundColor: Colors.red));
+                 return; // Stop execution
+               }
+            }
+            
             final newCust = CustomerModel(id: customer?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), name: nameCtrl.text, phone: phoneCtrl.text, address: addrCtrl.text);
             if (customer == null) await _repo.addCustomer(newCust); else await _repo.updateCustomer(newCust);
             if (mounted) { Navigator.pop(ctx); _loadData(); }
@@ -71,7 +78,6 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
     );
   }
 
-  // --- NEW BUTTON ROW WIDGET ---
   Widget _buildThreeButtonActions() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -104,7 +110,6 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
       ),
       body: Column(
         children: [
-          // Styled Search Bar
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
@@ -120,10 +125,7 @@ class _ManageCustomersViewState extends State<ManageCustomersView> {
               onChanged: _search,
             ),
           ),
-          
-          // ADDED BUTTON ROW HERE
           _buildThreeButtonActions(),
-
           Expanded(
             child: _filtered.isEmpty 
             ? const Center(child: Text("No customers found", style: TextStyle(color: Colors.grey)))

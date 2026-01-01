@@ -39,10 +39,22 @@ class _AddProductViewState extends State<AddProductView> {
   void _save() async {
     if (_nameCtrl.text.isEmpty || _priceCtrl.text.isEmpty) return;
 
+    final repo = DataRepository();
+
+    // --- NEW: DUPLICATE CHECK ---
+    // This stops the save if Name + Group + Category combination already exists
+    if (repo.checkProductExists(_nameCtrl.text, _groupCtrl.text, _catCtrl.text)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Product already exists in this Group/Category!"), backgroundColor: Colors.red)
+        );
+      }
+      return; // Stop execution here
+    }
+
     final newProduct = ProductModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameCtrl.text,
-      // REMOVED VARIANT HERE
       group: _groupCtrl.text,
       category: _catCtrl.text,
       price: double.tryParse(_priceCtrl.text) ?? 0,
@@ -53,8 +65,14 @@ class _AddProductViewState extends State<AddProductView> {
       image: _imagePath,
     );
 
-    await DataRepository().addProduct(newProduct);
-    if (mounted) Navigator.pop(context);
+    await repo.addProduct(newProduct);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Product Added Successfully!"))
+      );
+      Navigator.pop(context);
+    }
   }
 
   @override

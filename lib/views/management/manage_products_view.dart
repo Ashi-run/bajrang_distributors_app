@@ -105,7 +105,20 @@ class _ManageProductsViewState extends State<ManageProductsView> {
   void _editHeader(String oldName, bool isGroup, List<ProductModel> items) { TextEditingController ctrl = TextEditingController(text: oldName); showDialog(context: context, builder: (ctx) => AlertDialog(title: Text("Rename"), content: TextField(controller: ctrl), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Cancel")), ElevatedButton(onPressed: () async {Navigator.pop(ctx); if(ctrl.text.isNotEmpty && ctrl.text != oldName) { if(isGroup) await _repo.renameGroup(oldName, ctrl.text); else await _repo.renameCategory(items.first.group, oldName, ctrl.text); _loadData(); }}, child: const Text("Save"))])); }
   void _deleteHeader(String name, bool isGroup, List<ProductModel> items) { showDialog(context: context, builder: (ctx) => AlertDialog(title: Text("Delete $name?"), content: const Text("Delete all items inside?"), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text("Cancel")), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), onPressed: () async {Navigator.pop(ctx); if(isGroup) await _repo.deleteGroup(name); else await _repo.deleteCategory(items.first.group, name); _loadData();}, child: const Text("Delete"))])); }
   void _addNewItem({String? group, String? category}) async { await Navigator.push(context, MaterialPageRoute(builder: (_) => AddProductView(initialGroup: group, initialCategory: category))); _loadData(); }
-  void _showAddOptions() { showModalBottomSheet(context: context, backgroundColor: Colors.white, builder: (ctx) => Wrap(children: [ListTile(leading: const Icon(Icons.add_box, color: Colors.blue), title: const Text("Add Manual"), onTap: (){Navigator.pop(ctx); _addNewItem();}), ListTile(leading: const Icon(Icons.file_upload, color: Colors.green), title: const Text("Import Excel"), onTap: () async {Navigator.pop(ctx); await _repo.importProductData(); _loadData();})])); }
+  
+  void _showAddOptions() { 
+    showModalBottomSheet(context: context, backgroundColor: Colors.white, builder: (ctx) => Wrap(children: [
+      ListTile(leading: const Icon(Icons.add_box, color: Colors.blue), title: const Text("Add Manual"), onTap: (){Navigator.pop(ctx); _addNewItem();}), 
+      // --- UPDATED: Show Result Message ---
+      ListTile(leading: const Icon(Icons.file_upload, color: Colors.green), title: const Text("Import Excel"), onTap: () async {
+        Navigator.pop(ctx); 
+        String msg = await _repo.importProductData(); 
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        _loadData();
+      })
+    ])); 
+  }
+  
   Widget _buildSafeImage(String? path) { if (path == null || path.isEmpty) return const Icon(Icons.image, size: 40, color: Colors.grey); return Image.file(io.File(path), width: 40, height: 40, fit: BoxFit.cover, cacheWidth: 100, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, size: 40, color: Colors.grey)); }
 
   // --- NEW BUTTON ROW WIDGET ---
@@ -116,7 +129,12 @@ class _ManageProductsViewState extends State<ManageProductsView> {
         children: [
           Expanded(child: ElevatedButton(onPressed: () => _addNewItem(), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue), child: const Text('Add New'))),
           const SizedBox(width: 10),
-          Expanded(child: ElevatedButton(onPressed: () async { await _repo.importProductData(); _loadData(); }, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.green.shade50, foregroundColor: Colors.green), child: const Text('Import'))),
+          // --- UPDATED: Show Result Message ---
+          Expanded(child: ElevatedButton(onPressed: () async { 
+             String msg = await _repo.importProductData(); 
+             if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+             _loadData(); 
+          }, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.green.shade50, foregroundColor: Colors.green), child: const Text('Import'))),
           const SizedBox(width: 10),
           Expanded(child: ElevatedButton(onPressed: _loadData, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), backgroundColor: Colors.orange.shade50, foregroundColor: Colors.orange), child: const Text('Refresh'))),
         ],
@@ -138,7 +156,6 @@ class _ManageProductsViewState extends State<ManageProductsView> {
         children: [
           Container(padding: const EdgeInsets.all(12), color: Colors.white, child: TextField(controller: _searchController, decoration: InputDecoration(hintText: "Search...", prefixIcon: Icon(Icons.search, color: _brandBlue), suffixIcon: isSearching ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); _runSearch(""); }) : null, filled: true, fillColor: const Color(0xFFE8EAF6), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)), onChanged: _runSearch)),
           
-          // ADDED THE BUTTON ROW HERE
           _buildThreeButtonActions(),
 
           Expanded(

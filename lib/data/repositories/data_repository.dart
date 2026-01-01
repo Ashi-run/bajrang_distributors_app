@@ -39,6 +39,23 @@ class DataRepository {
   Future<void> updateOrder(OrderModel order) async => await _orderBox.put(order.id, order);
   Future<void> deleteOrder(String id) async => await _orderBox.delete(id);
 
+  // --- DUPLICATE CHECKS ---
+  
+  bool checkCustomerExists(String name) {
+    final list = _customerBox.values.toList();
+    return list.any((c) => c.name.trim().toLowerCase() == name.trim().toLowerCase());
+  }
+
+  // Returns TRUE if a product with exact Name + Group + Category already exists
+  bool checkProductExists(String name, String group, String category) {
+    final list = _productBox.values.toList();
+    return list.any((p) => 
+      p.name.trim().toLowerCase() == name.trim().toLowerCase() &&
+      p.group.trim().toLowerCase() == group.trim().toLowerCase() &&
+      p.category.trim().toLowerCase() == category.trim().toLowerCase()
+    );
+  }
+
   // --- SMART PRICE RESOLVER ---
   double getEffectivePrice(ProductModel product, String? customerName, String targetUom) {
     final allOrders = _orderBox.values.toList()
@@ -47,7 +64,6 @@ class DataRepository {
     double factor = ProductModel.toDoubleSafe(product.conversionFactor);
     if (factor <= 0) factor = 1.0;
 
-    // Helper: Convert price
     double convertPrice(double price, String fromUom, String toUom) {
       if (fromUom == toUom) return price;
       if (fromUom == product.uom && toUom == product.secondaryUom) return price * factor;
@@ -55,10 +71,8 @@ class DataRepository {
       return price; 
     }
 
-    // 1. CHECK CUSTOMER HISTORY
     if (customerName != null && customerName.isNotEmpty) {
       final customerOrders = allOrders.where((o) => o.customerName.trim().toLowerCase() == customerName.trim().toLowerCase());
-      // Priority 1A: Exact Match
       for (var order in customerOrders) {
         for (var item in order.items) {
            if ((item.product.id == product.id || item.product.name == product.name) && item.uom == targetUom) {
@@ -66,7 +80,6 @@ class DataRepository {
            }
         }
       }
-      // Priority 1B: Convert Match
       for (var order in customerOrders) {
         for (var item in order.items) {
            if (item.product.id == product.id || item.product.name == product.name) {
@@ -76,7 +89,6 @@ class DataRepository {
       }
     }
 
-    // 2. CHECK GLOBAL HISTORY
     for (var order in allOrders) {
       for (var item in order.items) {
          if ((item.product.id == product.id || item.product.name == product.name) && item.uom == targetUom) {
@@ -92,32 +104,26 @@ class DataRepository {
       }
     }
 
-    // --- 3. MASTER LIST PRICE (LOGIC UPDATED) ---
-    double pPrice = ProductModel.toDoubleSafe(product.price);    // Base Price (e.g., Jar)
-    double pPrice2 = ProductModel.toDoubleSafe(product.price2);  // Sec Price (e.g., Ctn)
+    double pPrice = ProductModel.toDoubleSafe(product.price);    
+    double pPrice2 = ProductModel.toDoubleSafe(product.price2);  
 
-    // A. If target is Secondary (e.g. Ctn)
     if (targetUom == product.secondaryUom) {
-       // If Ctn price exists, use it. If not, calculate from Jar.
        if (pPrice2 > 0) return pPrice2;              
-       if (pPrice > 0) return pPrice * factor; // Fix for 40 -> 1600      
+       if (pPrice > 0) return pPrice * factor;      
     }
     
-    // B. If target is Base (e.g. Jar)
     if (targetUom == product.uom) {
-       // Fix for 150 vs 146: If Ctn price exists (4400), derive Jar from it (4400/30 = 146)
        if (pPrice2 > 0 && factor > 0) {
          return pPrice2 / factor; 
        }
-       // Fallback to explicit Jar price only if Ctn price is missing
        if (pPrice > 0) return pPrice;                
     }
     
     return pPrice;
   }
 
-  // --- IMPORT EXCEL ---
-  Future<void> importProductData() async {
+  // --- IMPORT EXCEL: PRODUCTS (WITH DUPLICATE CHECK) ---
+  Future<String> importProductData() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls']);
       if (result != null) {
@@ -126,6 +132,12 @@ class DataRepository {
         var excel = Excel.decodeBytes(bytes);
         
         final sheet = excel.tables[excel.tables.keys.first];
+        
+        int addedCount = 0;
+        int skippedCount = 0;
+
+        List<ProductModel> tempProductList = _productBox.values.toList();
+
         if (sheet != null) {
           for (var i = 1; i < sheet.rows.length; i++) {
             List<dynamic> row = sheet.rows[i];
@@ -148,13 +160,28 @@ class DataRepository {
             }
 
             String name = safeVal(2);
+            String group = safeVal(0);
+            String category = safeVal(1);
+
             if (name.isEmpty) continue;
+
+            // --- CHECK DUPLICATE ---
+            bool exists = tempProductList.any((p) => 
+               p.name.toLowerCase() == name.toLowerCase() &&
+               p.group.toLowerCase() == group.toLowerCase() &&
+               p.category.toLowerCase() == category.toLowerCase()
+            );
+
+            if (exists) {
+              skippedCount++;
+              continue; 
+            }
 
             ProductModel p = ProductModel(
               id: DateTime.now().microsecondsSinceEpoch.toString() + i.toString(),
               name: name,
-              group: safeVal(0),
-              category: safeVal(1),
+              group: group,
+              category: category,
               uom: safeVal(3).isEmpty ? "Pkt" : safeVal(3),
               price: safeDouble(4),
               image: safeVal(5),
@@ -162,34 +189,21 @@ class DataRepository {
               conversionFactor: safeDouble(7),
               price2: 0.0, 
             );
+            
             await addProduct(p);
+            tempProductList.add(p); 
+            addedCount++;
           }
         }
+        return "Imported: $addedCount, Skipped (Duplicate): $skippedCount";
       }
+      return "No file selected";
     } catch (e) {
-      debugPrint("Import Error: $e");
+      return "Import Error: $e";
     }
   }
 
-  // --- BULK ACTIONS ---
-  Future<void> renameGroup(String oldName, String newName) async {
-    final products = getAllProducts().where((p) => p.group == oldName).toList();
-    for (var p in products) await updateProduct(p.copyWith(group: newName));
-  }
-  Future<void> deleteGroup(String name) async {
-    final products = getAllProducts().where((p) => p.group == name).toList();
-    for (var p in products) await deleteProduct(p.id);
-  }
-  Future<void> renameCategory(String g, String oldC, String newC) async {
-    final products = getAllProducts().where((p) => p.group == g && p.category == oldC).toList();
-    for (var p in products) await updateProduct(p.copyWith(category: newC));
-  }
-  Future<void> deleteCategory(String g, String c) async {
-    final products = getAllProducts().where((p) => p.group == g && p.category == c).toList();
-    for (var p in products) await deleteProduct(p.id);
-  }
-
-  // --- IMPORT EXCEL: CUSTOMERS ---
+  // --- IMPORT EXCEL: CUSTOMERS (WITH DUPLICATE CHECK) ---
   Future<String> importCustomerData() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -200,7 +214,11 @@ class DataRepository {
         File file = File(result.files.single.path!);
         var bytes = file.readAsBytesSync();
         var excel = Excel.decodeBytes(bytes);
-        int count = 0;
+        
+        int addedCount = 0;
+        int skippedCount = 0;
+        
+        List<CustomerModel> tempCustomerList = _customerBox.values.toList();
 
         for (var table in excel.tables.keys) {
           var sheet = excel.tables[table];
@@ -218,23 +236,52 @@ class DataRepository {
             String name = safeVal(0);
             if (name.isEmpty) continue;
 
+            // --- CHECK DUPLICATE ---
+            bool exists = tempCustomerList.any((c) => c.name.toLowerCase() == name.toLowerCase());
+
+            if (exists) {
+              skippedCount++;
+              continue;
+            }
+
             String phone = safeVal(1);
             String address = safeVal(2);
 
-            await addCustomer(CustomerModel(
+            var newCust = CustomerModel(
               id: DateTime.now().microsecondsSinceEpoch.toString() + i.toString(),
               name: name,
               phone: phone,
               address: address,
-            ));
-            count++;
+            );
+
+            await addCustomer(newCust);
+            tempCustomerList.add(newCust);
+            addedCount++;
           }
         }
-        return "Imported $count customers";
+        return "Imported: $addedCount, Skipped (Duplicate): $skippedCount";
       }
       return "No file selected";
     } catch (e) {
       return "Error: $e";
     }
+  }
+  
+  // BULK ACTIONS
+  Future<void> renameGroup(String oldName, String newName) async {
+    final products = getAllProducts().where((p) => p.group == oldName).toList();
+    for (var p in products) await updateProduct(p.copyWith(group: newName));
+  }
+  Future<void> deleteGroup(String name) async {
+    final products = getAllProducts().where((p) => p.group == name).toList();
+    for (var p in products) await deleteProduct(p.id);
+  }
+  Future<void> renameCategory(String g, String oldC, String newC) async {
+    final products = getAllProducts().where((p) => p.group == g && p.category == oldC).toList();
+    for (var p in products) await updateProduct(p.copyWith(category: newC));
+  }
+  Future<void> deleteCategory(String g, String c) async {
+    final products = getAllProducts().where((p) => p.group == g && p.category == c).toList();
+    for (var p in products) await deleteProduct(p.id);
   }
 }

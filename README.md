@@ -38,12 +38,12 @@ A comprehensive **Offline Sales & Order Management System** built with Flutter. 
 ## 📸 Screenshots
 
 | Dashboard | Place Order | Order History | PDF Invoice |
-|:---:|:---:|:---:|:---:|
-| <img width="540" height="1152" alt="image" src="https://github.com/user-attachments/assets/b1e29186-4e7e-4980-af5f-560dea76982e" />
- | <img width="540" height="1146" alt="image" src="https://github.com/user-attachments/assets/d1823cec-69d0-4b96-988c-6ce7821f80e9" />
- | <img width="540" height="1156" alt="image" src="https://github.com/user-attachments/assets/dfcd1e40-aeaf-4cbc-a725-6a385580de3b" />
-  | <img width="901" height="1280" alt="image" src="https://github.com/user-attachments/assets/24ecbca2-8237-4588-9979-cdaa667da512" />
-|
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b1e29186-4e7e-4980-af5f-560dea76982e" width="22%" />
+  <img src="https://github.com/user-attachments/assets/d1823cec-69d0-4b96-988c-6ce7821f80e9" width="22%" />
+  <img src="https://github.com/user-attachments/assets/dfcd1e40-aeaf-4cbc-a725-6a385580de3b" width="22%" />
+  <img src="https://github.com/user-attachments/assets/24ecbca2-8237-4588-9979-cdaa667da512" width="22%" />
+</p>
 
 ---
 
